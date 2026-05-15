@@ -1,5 +1,5 @@
 export type RealmType = "cloudcity" | "valley" | "samurai";
-export type PageId = "hub" | "workflow" | "assets" | "image" | "video" | "seedance" | "projects" | "settings";
+export type PageId = "hub" | "workflow" | "scripts" | "assets" | "image" | "video" | "seedance" | "projects" | "settings";
 
 export interface UserProfile {
   username: string;
@@ -59,6 +59,8 @@ export interface ScriptTask {
   updated_at?: string;
   createdAt?: string;
   created_at?: string;
+  generatedAt?: string;
+  generated_at?: string;
   reviewScore?: number | null;
   review_score?: number | null;
   reviewStatus?: string | null;
@@ -73,6 +75,8 @@ export interface ScriptTask {
   moduleType?: string;
   module_type?: string;
   outputs?: ScriptOutputRecord[];
+  sections?: Array<{ title?: string; content?: string }>;
+  characters?: any[];
   task?: ScriptTask;
   review?: ReviewResult | null;
   assets?: any[];
@@ -128,6 +132,12 @@ export interface ReviewResult {
   issues?: string[];
   suggestions?: string[];
   dimensions?: any[];
+  issuesJson?: string;
+  issues_json?: string;
+  suggestionsJson?: string;
+  suggestions_json?: string;
+  dimensionsJson?: string;
+  dimensions_json?: string;
 }
 
 export interface AssetBundle {
@@ -167,7 +177,7 @@ export interface TudouBridge {
   updateAssets(taskId: string, characters: any[], scenes: any[], props: any[]): Promise<any>;
   getProjects(): Promise<any[]>;
   renameProject(projectId: string, newName: string): Promise<any>;
-  deleteProject(projectId: string): Promise<any>;
+  deleteProject(projectId: string, newName?: string): Promise<any>;
   screenplay: {
     skillStatus(): Promise<any>;
     createProject(init: Record<string, any>): Promise<ProjectRecord>;
