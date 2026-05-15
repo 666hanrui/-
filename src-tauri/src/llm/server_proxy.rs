@@ -1,4 +1,6 @@
 use crate::llm::config::RuntimeConfig;
+use sha2::{Digest, Sha256};
+use std::io::Write;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ContextualLlmParams {
@@ -46,12 +48,25 @@ async fn request_prompt_llm_inner(
         crate::llm::prompts::build_prompt_slug(&params.prompt_slug, &params.user_messages);
 
     let mut messages = vec![serde_json::json!({"role": "system", "content": system_prompt})];
-    messages.extend(user_messages);
+    messages.extend(user_messages.clone());
 
     let cfg = &params.runtime_config;
     let model = &cfg.default_model;
     let mode = &cfg.text_mode;
     let temperature = resolve_temperature(model, params.temperature);
+    let max_tokens = 8192;
+
+    dump_prompt_audit(
+        "request_prompt_llm",
+        Some(&params.prompt_slug),
+        None,
+        &prompt_slug_file(&params.prompt_slug),
+        messages.first().and_then(|m| m["content"].as_str()).unwrap_or(""),
+        &user_messages,
+        model,
+        max_tokens,
+        &serde_json::json!({ "temperature": temperature, "mode": mode }),
+    );
 
     if cfg.api_key.is_empty() || cfg.api_base_url.is_empty() {
         return Err("API 未配置，无法发起模型调用。".into());
@@ -63,7 +78,7 @@ async fn request_prompt_llm_inner(
         mode,
         &messages,
         temperature,
-        8192,
+        max_tokens,
         &mut on_chunk,
     )
     .await
@@ -76,9 +91,10 @@ pub async fn request_contextual_llm_stream(
     let (system_prompt, user_prompt) =
         crate::llm::prompts::build_prompt(&params.context_type, &params.context_params);
 
+    let user_messages = vec![serde_json::json!({"role": "user", "content": user_prompt})];
     let messages = vec![
         serde_json::json!({"role": "system", "content": system_prompt}),
-        serde_json::json!({"role": "user", "content": user_prompt}),
+        user_messages[0].clone(),
     ];
 
     let cfg = &params.runtime_config;
@@ -86,6 +102,25 @@ pub async fn request_contextual_llm_stream(
     let mode = &cfg.text_mode;
     let temperature = resolve_temperature(model, params.temperature);
     let max_tokens = params.max_tokens_override.unwrap_or(8192);
+
+    dump_prompt_audit(
+        "request_contextual_llm_stream",
+        None,
+        Some(&params.context_type),
+        &context_prompt_file(&params.context_type, &params.context_params),
+        messages.first().and_then(|m| m["content"].as_str()).unwrap_or(""),
+        &user_messages,
+        model,
+        max_tokens,
+        &serde_json::json!({
+            "temperature": temperature,
+            "mode": mode,
+            "contextParams": params.context_params,
+            "projectId": params.context_params.get("projectId").cloned().unwrap_or(serde_json::Value::Null),
+            "taskId": params.context_params.get("taskId").cloned().unwrap_or(serde_json::Value::Null),
+            "stepNumber": params.context_params.get("stepNumber").cloned().unwrap_or(serde_json::Value::Null)
+        }),
+    );
 
     if cfg.api_key.is_empty() || cfg.api_base_url.is_empty() {
         return Err("API 未配置，无法发起模型调用。".into());
@@ -161,10 +196,7 @@ pub async fn test_connection(
     let msg = match status.as_u16() {
         400 => {
             if looks_like_model_error(&detail) {
-                format!(
-                    "模型名无效：{}",
-                    provider_error.unwrap_or_else(|| "模型端点拒绝该模型".into())
-                )
+                format!("模型名无效：{}", provider_error.unwrap_or_else(|| "模型端点拒绝该模型".into()))
             } else {
                 format!("请求参数错误（400）{}", provider_msg(provider_error))
             }
@@ -173,13 +205,7 @@ pub async fn test_connection(
         403 => format!("权限不足或配额耗尽{}", provider_msg(provider_error)),
         404 => format!("端点路径不存在（404）{}", provider_msg(provider_error)),
         429 => format!("请求过频或配额耗尽（429）{}", provider_msg(provider_error)),
-        _ if status.as_u16() >= 500 => {
-            format!(
-                "模型服务异常（{}）{}",
-                status.as_u16(),
-                provider_msg(provider_error)
-            )
-        }
+        _ if status.as_u16() >= 500 => format!("模型服务异常（{}）{}", status.as_u16(), provider_msg(provider_error)),
         _ => format!("HTTP {}{}", status.as_u16(), provider_msg(provider_error)),
     };
 
@@ -197,18 +223,10 @@ fn build_text_url(endpoint: &str, model: &str, mode: &str) -> String {
     match mode {
         "gemini" => format!("{}/models/{}:generateContent", base, model),
         "anthropic" => {
-            if base.ends_with("/messages") {
-                base
-            } else {
-                format!("{}/messages", base)
-            }
+            if base.ends_with("/messages") { base } else { format!("{}/messages", base) }
         }
         _ => {
-            if base.ends_with("/chat/completions") {
-                base
-            } else {
-                format!("{}/chat/completions", base)
-            }
+            if base.ends_with("/chat/completions") { base } else { format!("{}/chat/completions", base) }
         }
     }
 }
@@ -217,29 +235,15 @@ fn build_text_url(endpoint: &str, model: &str, mode: &str) -> String {
 
 fn build_headers(key: &str, mode: &str) -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(
-        reqwest::header::CONTENT_TYPE,
-        "application/json".parse().unwrap(),
-    );
+    headers.insert(reqwest::header::CONTENT_TYPE, "application/json".parse().unwrap());
     match mode {
         "anthropic" => {
-            headers.insert(
-                reqwest::header::HeaderName::from_static("x-api-key"),
-                key.parse().unwrap(),
-            );
-            headers.insert(
-                reqwest::header::HeaderName::from_static("anthropic-version"),
-                "2023-06-01".parse().unwrap(),
-            );
+            headers.insert(reqwest::header::HeaderName::from_static("x-api-key"), key.parse().unwrap());
+            headers.insert(reqwest::header::HeaderName::from_static("anthropic-version"), "2023-06-01".parse().unwrap());
         }
-        "gemini" => {
-            // key goes in query param, not header
-        }
+        "gemini" => {}
         _ => {
-            headers.insert(
-                reqwest::header::AUTHORIZATION,
-                format!("Bearer {}", key).parse().unwrap(),
-            );
+            headers.insert(reqwest::header::AUTHORIZATION, format!("Bearer {}", key).parse().unwrap());
         }
     }
     headers
@@ -295,10 +299,7 @@ fn build_gemini_body(messages: &[serde_json::Value]) -> serde_json::Value {
         .iter()
         .map(|m| {
             let text = m["content"].as_str().unwrap_or("");
-            serde_json::json!({
-                "role": "user",
-                "parts": [{"text": text}]
-            })
+            serde_json::json!({ "role": "user", "parts": [{"text": text}] })
         })
         .collect();
     serde_json::json!({ "contents": contents })
@@ -346,11 +347,7 @@ async fn request_openai_stream(
     let status = response.status();
     if !status.is_success() {
         let detail = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "OpenAI 调用失败（{}）：{}",
-            status.as_u16(),
-            &detail[..detail.len().min(200)]
-        ));
+        return Err(format!("OpenAI 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
     parse_openai_sse(response, &mut on_chunk).await
@@ -379,11 +376,7 @@ async fn request_anthropic_stream(
     let status = response.status();
     if !status.is_success() {
         let detail = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Anthropic 调用失败（{}）：{}",
-            status.as_u16(),
-            &detail[..detail.len().min(200)]
-        ));
+        return Err(format!("Anthropic 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
     parse_anthropic_sse(response, &mut on_chunk).await
@@ -415,11 +408,7 @@ async fn request_gemini(
     let status = response.status();
     if !status.is_success() {
         let detail = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Gemini 调用失败（{}）：{}",
-            status.as_u16(),
-            &detail[..detail.len().min(200)]
-        ));
+        return Err(format!("Gemini 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
     let payload: serde_json::Value = response
@@ -445,8 +434,6 @@ async fn request_gemini(
         return Err("Gemini 返回了空内容。".into());
     }
 
-    // Gemini doesn't support streaming — deliver full result at once
-    // We need interior mutability for the callback since we're not streaming
     let mut cb = on_chunk;
     cb(&text);
     Ok(text)
@@ -454,10 +441,7 @@ async fn request_gemini(
 
 // ── SSE Parsing ──
 
-async fn parse_openai_sse(
-    response: reqwest::Response,
-    on_chunk: &mut impl FnMut(&str),
-) -> Result<String, String> {
+async fn parse_openai_sse(response: reqwest::Response, on_chunk: &mut impl FnMut(&str)) -> Result<String, String> {
     use futures::StreamExt;
 
     let stream = response.bytes_stream();
@@ -469,13 +453,8 @@ async fn parse_openai_sse(
         let mut s = stream;
         while let Some(chunk) = s.next().await {
             match chunk {
-                Ok(bytes) => {
-                    let _ = tx.send(bytes);
-                }
-                Err(e) => {
-                    log::error!("SSE stream error: {}", e);
-                    break;
-                }
+                Ok(bytes) => { let _ = tx.send(bytes); }
+                Err(e) => { log::error!("SSE stream error: {}", e); break; }
             }
         }
     });
@@ -492,19 +471,11 @@ async fn parse_openai_sse(
 
         for line in lines.iter().take(lines.len().saturating_sub(1)) {
             let trimmed = line.trim();
-            if !trimmed.starts_with("data:") {
-                continue;
-            }
+            if !trimmed.starts_with("data:") { continue; }
             let data = trimmed[5..].trim();
-            if data == "[DONE]" {
-                continue;
-            }
+            if data == "[DONE]" { continue; }
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(text) = parsed["choices"]
-                    .as_array()
-                    .and_then(|c| c.first())
-                    .and_then(|c| c["delta"]["content"].as_str())
-                {
+                if let Some(text) = parsed["choices"].as_array().and_then(|c| c.first()).and_then(|c| c["delta"]["content"].as_str()) {
                     full.push_str(text);
                     on_chunk(text);
                 }
@@ -515,10 +486,7 @@ async fn parse_openai_sse(
     Ok(full.trim().to_string())
 }
 
-async fn parse_anthropic_sse(
-    response: reqwest::Response,
-    on_chunk: &mut impl FnMut(&str),
-) -> Result<String, String> {
+async fn parse_anthropic_sse(response: reqwest::Response, on_chunk: &mut impl FnMut(&str)) -> Result<String, String> {
     use futures::StreamExt;
 
     let stream = response.bytes_stream();
@@ -530,13 +498,8 @@ async fn parse_anthropic_sse(
         let mut s = stream;
         while let Some(chunk) = s.next().await {
             match chunk {
-                Ok(bytes) => {
-                    let _ = tx.send(bytes);
-                }
-                Err(e) => {
-                    log::error!("SSE stream error: {}", e);
-                    break;
-                }
+                Ok(bytes) => { let _ = tx.send(bytes); }
+                Err(e) => { log::error!("SSE stream error: {}", e); break; }
             }
         }
     });
@@ -553,9 +516,7 @@ async fn parse_anthropic_sse(
 
         for line in lines.iter().take(lines.len().saturating_sub(1)) {
             let trimmed = line.trim();
-            if !trimmed.starts_with("data:") {
-                continue;
-            }
+            if !trimmed.starts_with("data:") { continue; }
             let data = trimmed[5..].trim();
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
                 if parsed["type"] == "content_block_delta" {
@@ -571,28 +532,121 @@ async fn parse_anthropic_sse(
     Ok(full.trim().to_string())
 }
 
+// ── Prompt Audit ──
+
+fn dump_prompt_audit(
+    command: &str,
+    prompt_slug: Option<&str>,
+    context_type: Option<&str>,
+    prompt_file: &str,
+    system_prompt: &str,
+    user_messages: &[serde_json::Value],
+    model: &str,
+    max_tokens: u32,
+    metadata: &serde_json::Value,
+) {
+    let user_json = serde_json::to_string(user_messages).unwrap_or_default();
+    let hash_input = format!("{}\n{}\n{}\n{}", prompt_file, system_prompt, user_json, model);
+    let mut hasher = Sha256::new();
+    hasher.update(hash_input.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let short_hash = &hash[..16];
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    dir.push("data");
+    dir.push("debug-prompts");
+    if std::fs::create_dir_all(&dir).is_err() { return; }
+
+    let audit = serde_json::json!({
+        "command": command,
+        "contextType": context_type,
+        "promptSlug": prompt_slug,
+        "promptFile": prompt_file,
+        "systemPrompt": system_prompt,
+        "userMessages": user_messages,
+        "model": model,
+        "maxTokens": max_tokens,
+        "projectId": metadata.get("projectId").cloned().unwrap_or(serde_json::Value::Null),
+        "taskId": metadata.get("taskId").cloned().unwrap_or(serde_json::Value::Null),
+        "stepNumber": metadata.get("stepNumber").cloned().unwrap_or(serde_json::Value::Null),
+        "metadata": metadata,
+        "promptHash": hash,
+        "createdAtEpochMs": now_ms
+    });
+
+    let filename_key = prompt_slug.or(context_type).unwrap_or("unknown").replace('/', "_");
+    let dump_path = dir.join(format!("{}-{}-{}.json", now_ms, filename_key, short_hash));
+    if let Ok(text) = serde_json::to_string_pretty(&audit) {
+        let _ = std::fs::write(&dump_path, text);
+    }
+
+    let index_path = dir.join("prompt_hash_index.jsonl");
+    let index = serde_json::json!({
+        "promptHash": hash,
+        "promptFile": prompt_file,
+        "promptSlug": prompt_slug,
+        "contextType": context_type,
+        "command": command,
+        "model": model,
+        "maxTokens": max_tokens,
+        "dumpFile": dump_path.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+        "createdAtEpochMs": now_ms
+    });
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(index_path) {
+        let _ = writeln!(file, "{}", index);
+    }
+}
+
+fn prompt_slug_file(slug: &str) -> String {
+    match slug {
+        "script_planning" => "src-tauri/src/llm/prompts/slug_script_planning.txt".into(),
+        "script_writing" => "src-tauri/src/llm/prompts/slug_script_writing.txt".into(),
+        "script_review" => "src-tauri/src/llm/prompts/slug_script_review.txt".into(),
+        "asset_character" => "src-tauri/src/llm/prompts/slug_asset_character.txt".into(),
+        "asset_scene" => "src-tauri/src/llm/prompts/slug_asset_scene.txt".into(),
+        "asset_prop" => "src-tauri/src/llm/prompts/slug_asset_prop.txt".into(),
+        "prompt_segment_planning" => "src-tauri/src/llm/prompts/slug_prompt_segment_planning.txt".into(),
+        "prompt_seedance_scene" => "src-tauri/src/llm/prompts/slug_prompt_seedance_scene.txt".into(),
+        "image_prompt_generation" => "src-tauri/src/llm/prompts/slug_image_prompt_generation.txt".into(),
+        "video_prompt_generation" => "src-tauri/src/llm/prompts/slug_video_prompt_generation.txt".into(),
+        "prompt_review" => "src-tauri/src/llm/prompts/slug_prompt_review.txt".into(),
+        other => format!("UNKNOWN_PROMPT_SLUG:{}", other),
+    }
+}
+
+fn context_prompt_file(context_type: &str, params: &serde_json::Value) -> String {
+    match context_type {
+        "screenplay_step" => {
+            let n = params["stepNumber"].as_u64().unwrap_or(0);
+            format!("src-tauri/src/llm/prompts/step{}.txt", n)
+        }
+        "screenplay_selfcheck" => "src-tauri/src/llm/prompts/selfcheck.txt".into(),
+        "screenplay_checkpoint" => "src-tauri/src/llm/prompts/checkpoint.txt".into(),
+        "seedance_phase_ad" => "src-tauri/src/llm/prompts/ctx_seedance_phase_ad.txt".into(),
+        "seedance_unit_efg" => "src-tauri/src/llm/prompts/ctx_seedance_unit_efg.txt".into(),
+        other => format!("UNKNOWN_CONTEXT_TYPE:{}", other),
+    }
+}
+
 // ── Utilities ──
 
 fn resolve_temperature(model: &str, requested: Option<f32>) -> f32 {
     let name = model.to_lowercase();
-    if name.starts_with("kimi-k2") {
-        return 1.0;
-    }
+    if name.starts_with("kimi-k2") { return 1.0; }
     requested.unwrap_or(0.8)
 }
 
 fn urlencoding(s: &str) -> String {
-    // Simple URL encoding for API keys (only encode special chars)
     let mut result = String::with_capacity(s.len());
     for byte in s.bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(byte as char);
-            }
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => result.push(byte as char),
             b' ' => result.push_str("%20"),
-            _ => {
-                result.push_str(&format!("%{:02X}", byte));
-            }
+            _ => result.push_str(&format!("%{:02X}", byte)),
         }
     }
     result
@@ -603,21 +657,12 @@ fn extract_provider_error(detail: &str) -> Option<String> {
         let e = parsed.get("error")?;
         let msg = match e {
             serde_json::Value::String(s) => Some(s.clone()),
-            _ => e
-                .get("message")
-                .or_else(|| e.get("msg"))
-                .or_else(|| e.get("reason"))
-                .and_then(|v| v.as_str())
-                .map(String::from),
+            _ => e.get("message").or_else(|| e.get("msg")).or_else(|| e.get("reason")).and_then(|v| v.as_str()).map(String::from),
         };
         return msg;
     }
-    // Try top-level "message" field if no "error" field
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(detail) {
-        return parsed
-            .get("message")
-            .and_then(|v| v.as_str())
-            .map(String::from);
+        return parsed.get("message").and_then(|v| v.as_str()).map(String::from);
     }
     None
 }
@@ -639,17 +684,12 @@ fn looks_like_model_error(detail: &str) -> bool {
         || s.contains("model does not exist")
 }
 
-// Helper trait to convert Option<String> to Option<&str> for collect
 trait IntoOption {
     fn into_option(self) -> Option<String>;
 }
 
 impl IntoOption for String {
     fn into_option(self) -> Option<String> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self)
-        }
+        if self.is_empty() { None } else { Some(self) }
     }
 }
