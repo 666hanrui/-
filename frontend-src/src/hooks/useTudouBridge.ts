@@ -20,6 +20,7 @@ const ACTION_MAP: Record<string, string> = {
   "workflow/approve": "screenplay_approve_step",
   "workflow/rollback": "screenplay_rollback_to",
   "workflow/versions": "screenplay_list_versions",
+  "workflow/restore-version": "screenplay_restore_version",
   "workflow/get-checkpoint": "screenplay_get_checkpoint",
   "workflow/regenerate-checkpoint": "screenplay_regenerate_checkpoint",
   "workflow/doctor": "doctor_diagnose",
