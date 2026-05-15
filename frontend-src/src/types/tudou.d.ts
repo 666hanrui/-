@@ -11,7 +11,7 @@ export interface AppSettings {
   textEndpoint: string;
   textKey: string;
   textModel: string;
-  textMode: "openai" | "gemini" | "anthropic";
+  textMode: "openai" | "gemini" | "anthropic" | string;
   imageEndpoint: string;
   imageKey: string;
   imageModel: string;
@@ -19,26 +19,71 @@ export interface AppSettings {
   enableLocalSave: boolean;
 }
 
-export interface ScriptTask {
-  taskId: string;
-  projectId?: string;
-  projectName?: string;
-  name?: string;
-  mode?: string;
-  stage?: string;
-  updatedAt?: string;
-  createdAt?: string;
+export interface ScriptOutputRecord {
+  id?: string;
+  taskId?: string;
+  task_id?: string;
+  charactersJson?: string;
+  characters_json?: string;
+  plotOutline?: string;
+  plot_outline?: string;
   scriptBody?: string;
   script_body?: string;
+  hookOpening?: string;
+  hook_opening?: string;
+  storyboardBase?: string;
+  storyboard_base?: string;
+  rawResponse?: string;
+  raw_response?: string;
+  createdAt?: string;
+  created_at?: string;
+}
+
+export interface ScriptTask {
+  taskId?: string;
+  task_id?: string;
+  projectId?: string;
+  project_id?: string;
+  projectName?: string;
+  project_name?: string;
+  inputSummary?: string;
+  input_summary?: string;
+  name?: string;
+  mode?: string;
+  genre?: string;
+  style?: string;
+  duration?: string;
+  stage?: string;
+  status?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  createdAt?: string;
+  created_at?: string;
+  reviewScore?: number | null;
+  review_score?: number | null;
+  reviewStatus?: string | null;
+  review_status?: string | null;
+  scriptBody?: string;
+  script_body?: string;
+  plotOutline?: string;
+  plot_outline?: string;
   body?: string;
   text?: string;
   output?: string;
   moduleType?: string;
+  module_type?: string;
+  outputs?: ScriptOutputRecord[];
+  task?: ScriptTask;
+  review?: ReviewResult | null;
+  assets?: any[];
+  promptOutput?: any;
 }
 
 export interface ProjectRecord {
-  projectId: string;
+  projectId?: string;
   project_id?: string;
+  id?: string;
+  name?: string;
   init?: Record<string, any>;
   currentStep?: number;
   current_step?: number;
@@ -62,9 +107,13 @@ export interface StepVersion {
 
 export interface PromptResult {
   projectId?: string;
+  project_id?: string;
   taskId?: string;
+  task_id?: string;
   projectName?: string;
+  project_name?: string;
   generatedAt?: string;
+  generated_at?: string;
   sections?: Array<{ title?: string; name?: string; heading?: string; lines?: string[]; content?: string; prompt?: string; text?: string }>;
   groups?: any[];
   text?: string;
