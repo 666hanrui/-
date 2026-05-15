@@ -28,6 +28,7 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
 export const NAV_ITEMS: NavItem[] = [
   { id: "hub", label: "灵感枢纽", eyebrow: "Genesis", realm: "cloudcity" },
   { id: "workflow", label: "剧本工作流", eyebrow: "Screenplay", realm: "valley" },
+  { id: "scripts", label: "剧本任务", eyebrow: "Script Tasks", realm: "valley" },
   { id: "assets", label: "资产锻造", eyebrow: "Assets", realm: "samurai" },
   { id: "image", label: "图像提示词", eyebrow: "Image Prompt", realm: "samurai" },
   { id: "video", label: "视频提示词", eyebrow: "Video Prompt", realm: "valley" },
