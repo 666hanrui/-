@@ -4,6 +4,7 @@ import MainLayout from "./layouts/MainLayout";
 import AuthModal from "./components/AuthModal";
 import InspirationHub from "./pages/InspirationHub";
 import WorkflowValley from "./pages/WorkflowValley";
+import ScriptTasksPage from "./pages/ScriptTasksPage";
 import AssetsForge from "./pages/AssetsForge";
 import PromptLab from "./pages/PromptLab";
 import SeedancePage from "./pages/SeedancePage";
@@ -18,6 +19,7 @@ function App() {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<InspirationHub />} />
           <Route path="workflow" element={<WorkflowValley />} />
+          <Route path="scripts" element={<ScriptTasksPage />} />
           <Route path="assets" element={<AssetsForge />} />
           <Route path="image" element={<PromptLab kind="image" />} />
           <Route path="video" element={<PromptLab kind="video" />} />
