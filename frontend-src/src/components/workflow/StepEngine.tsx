@@ -191,7 +191,6 @@ export default function StepEngine({
         { timeout: 300000 }
       );
       setCheckpoint(next || "");
-      onProjectChanged?.();
       return next || "";
     } finally {
       setIsCheckpointing(false);
@@ -216,8 +215,10 @@ export default function StepEngine({
       );
       if (stepConfig.id === 6) {
         await regenerateCheckpoint();
+        onProjectChanged?.();
+      } else {
+        onProjectChanged?.(nextProject);
       }
-      onProjectChanged?.(nextProject);
       if (!isLastStep) onNext();
     } catch (err: any) {
       setError(err.message || "批准本步失败");
