@@ -1,6 +1,6 @@
-# CineForge 创剧
+# ScriptStack 剧本栈
 
-从剧本到电影的流线化产出工具。CineForge 是 Tauri 2 桌面应用，集成 AI 大模型，覆盖剧本创作、视觉设计、视频生成全流程。
+从剧本到电影的流线化产出工具。ScriptStack 是 Tauri 2 桌面应用，集成 AI 大模型，覆盖剧本创作、视觉设计、视频生成全流程。
 
 ## 快速开始
 
@@ -14,7 +14,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/innovationpuls-creator/rerust.git
+git clone https://github.com/scriptstack/scriptstack.git
 cd rerust
 
 # 2. 安装前端依赖
@@ -53,7 +53,7 @@ src-tauri/src/
 │   ├── config.rs        # LLM 配置（endpoint、key、model）
 │   ├── prompts.rs       # Prompt 模板加载
 │   ├── prompts/         # 各步骤的提示词模板（.txt）
-│   └── server_proxy.rs  # LLM API 代理（OpenAI 兼容协议）
+│   └── server_proxy.rs  # 本地提示词编排 + 用户配置模型端点调用
 ├── services/
 │   ├── screenplay.rs         # 剧本创作工作流（8 步法）
 │   ├── screenplay_store.rs   # 剧本项目持久化
@@ -123,7 +123,7 @@ AI 驱动的剧本质量评审，提供结构化反馈。
 
 ## LLM 配置
 
-CineForge 兼容 OpenAI API 协议的 LLM 服务。在应用内配置：
+ScriptStack 兼容 OpenAI API 协议的 LLM 服务。在应用内配置：
 
 - **Endpoint** — API 地址
 - **API Key** — 访问密钥
@@ -165,4 +165,4 @@ rerust/
 
 ## License
 
-Private — All rights reserved.
+MIT License

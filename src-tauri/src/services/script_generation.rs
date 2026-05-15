@@ -3,7 +3,7 @@ use serde_json::json;
 
 use crate::db::crud::{self, ScriptGenerationInput, ScriptGenerationResult, ScriptSection};
 use crate::llm::config::RuntimeConfig;
-use crate::llm::server_proxy::{self, ServerLlmParams};
+use crate::llm::server_proxy::{self, PromptLlmParams};
 
 /// Build the generation payload via two-round LLM call (planning → writing).
 async fn build_generation_payload(
@@ -27,8 +27,10 @@ async fn build_generation_payload(
     .to_string();
 
     // Round 1: Planning (silent)
-    let plan_result = server_proxy::request_server_llm(ServerLlmParams {
-        runtime_config: RuntimeConfig { ..runtime_config.clone() },
+    let plan_result = server_proxy::request_prompt_llm(PromptLlmParams {
+        runtime_config: RuntimeConfig {
+            ..runtime_config.clone()
+        },
         prompt_slug: "script_planning".into(),
         user_messages: vec![json!({"role": "user", "content": input_json})],
         temperature: Some(0.7),
@@ -42,9 +44,11 @@ async fn build_generation_payload(
     ];
 
     let script_completion = if let Some(cb) = on_chunk {
-        server_proxy::request_server_llm_stream(
-            ServerLlmParams {
-                runtime_config: RuntimeConfig { ..runtime_config.clone() },
+        server_proxy::request_prompt_llm_stream(
+            PromptLlmParams {
+                runtime_config: RuntimeConfig {
+                    ..runtime_config.clone()
+                },
                 prompt_slug: "script_writing".into(),
                 user_messages: writing_messages,
                 temperature: Some(0.7),
@@ -53,8 +57,10 @@ async fn build_generation_payload(
         )
         .await?
     } else {
-        server_proxy::request_server_llm(ServerLlmParams {
-            runtime_config: RuntimeConfig { ..runtime_config.clone() },
+        server_proxy::request_prompt_llm(PromptLlmParams {
+            runtime_config: RuntimeConfig {
+                ..runtime_config.clone()
+            },
             prompt_slug: "script_writing".into(),
             user_messages: writing_messages,
             temperature: Some(0.7),
@@ -90,7 +96,7 @@ pub async fn run_script_generation(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),

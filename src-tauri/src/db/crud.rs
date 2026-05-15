@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 fn uuid() -> String {
@@ -83,6 +85,8 @@ pub fn save_app_settings(conn: &Connection, input: &AppSettings) -> AppSettings 
         )
         .unwrap();
 
+    let threshold_str = input.review_threshold.to_string();
+    let local_save_str = if input.enable_local_save { "1" } else { "0" };
     let pairs: [(&str, &str); 9] = [
         ("textEndpoint", &input.text_endpoint),
         ("textKey", &input.text_key),
@@ -91,14 +95,8 @@ pub fn save_app_settings(conn: &Connection, input: &AppSettings) -> AppSettings 
         ("imageEndpoint", &input.image_endpoint),
         ("imageKey", &input.image_key),
         ("imageModel", &input.image_model),
-        (
-            "reviewThreshold",
-            &input.review_threshold.to_string(),
-        ),
-        (
-            "enableLocalSave",
-            if input.enable_local_save { "1" } else { "0" },
-        ),
+        ("reviewThreshold", &threshold_str),
+        ("enableLocalSave", local_save_str),
     ];
 
     for (key, val) in &pairs {
@@ -235,7 +233,11 @@ pub fn save_image_draft(conn: &Connection, input: &ImageVideoDraftInput) -> Draf
         ],
     )
     .unwrap();
-    DraftResult { project_id, task_id, saved_at: t }
+    DraftResult {
+        project_id,
+        task_id,
+        saved_at: t,
+    }
 }
 
 pub fn save_video_draft(conn: &Connection, input: &ImageVideoDraftInput) -> DraftResult {
@@ -264,7 +266,11 @@ pub fn save_video_draft(conn: &Connection, input: &ImageVideoDraftInput) -> Draf
         ],
     )
     .unwrap();
-    DraftResult { project_id, task_id, saved_at: t }
+    DraftResult {
+        project_id,
+        task_id,
+        saved_at: t,
+    }
 }
 
 // ── Script Generation ──
@@ -306,10 +312,15 @@ pub struct ScriptGenerationResult {
 pub fn fallback_sections(mode: &str) -> Vec<ScriptSection> {
     let text = match mode {
         "image" => "【图片连续性剧本预演】\n系统正在从参考图片中反推人物身份、视觉线索与冲突起点。",
-        "rewrite" => "【剧本优化重生系统预演】\n系统将保留原剧情主线，优先压缩冗余、强化冲突、提前爆点。",
+        "rewrite" => {
+            "【剧本优化重生系统预演】\n系统将保留原剧情主线，优先压缩冗余、强化冲突、提前爆点。"
+        }
         _ => "【剧情描述生成剧本预演】\n系统会围绕重生、背叛、反击三条线组织故事。",
     };
-    vec![ScriptSection { title: "完整结果文本".into(), content: text.into() }]
+    vec![ScriptSection {
+        title: "完整结果文本".into(),
+        content: text.into(),
+    }]
 }
 
 pub fn save_script_generation(
@@ -337,9 +348,17 @@ pub fn save_script_generation(
         params![task_id, project_id, input.mode, input.input_summary.trim(), input.duration.as_deref().unwrap_or_default(), t, t],
     ).unwrap();
 
-    conn.execute("DELETE FROM script_outputs WHERE task_id = ?1", params![task_id]).ok();
+    conn.execute(
+        "DELETE FROM script_outputs WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
 
-    let script_body: String = sections.iter().map(|s| s.content.as_str()).collect::<Vec<_>>().join("\n\n");
+    let script_body: String = sections
+        .iter()
+        .map(|s| s.content.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
     let chars_json = serde_json::to_string(&characters).unwrap_or_default();
     let raw = raw_response.map(|v| v.to_string()).unwrap_or_default();
 
@@ -349,7 +368,15 @@ pub fn save_script_generation(
         params![uuid(), task_id, chars_json, script_body, script_body, script_body, script_body, raw, t],
     ).unwrap();
 
-    ScriptGenerationResult { project_id, task_id, stage: "ready".into(), generated_at: t, project_name, sections, characters }
+    ScriptGenerationResult {
+        project_id,
+        task_id,
+        stage: "ready".into(),
+        generated_at: t,
+        project_name,
+        sections,
+        characters,
+    }
 }
 
 pub fn update_script_body(conn: &Connection, task_id: &str, new_body: &str) {
@@ -361,11 +388,17 @@ pub fn update_script_body(conn: &Connection, task_id: &str, new_body: &str) {
         )
         .ok();
     if let Some(ref oid) = output_id {
-        conn.execute("UPDATE script_outputs SET script_body = ?1, plot_outline = ?1 WHERE id = ?2", params![new_body, oid])
-            .ok();
-    }
-    conn.execute("UPDATE script_tasks SET updated_at = ?1 WHERE id = ?2", params![now(), task_id])
+        conn.execute(
+            "UPDATE script_outputs SET script_body = ?1, plot_outline = ?1 WHERE id = ?2",
+            params![new_body, oid],
+        )
         .ok();
+    }
+    conn.execute(
+        "UPDATE script_tasks SET updated_at = ?1 WHERE id = ?2",
+        params![now(), task_id],
+    )
+    .ok();
 }
 
 // ── Import Existing Script ──
@@ -377,15 +410,29 @@ pub struct ImportScriptInput {
     pub duration: Option<String>,
 }
 
-pub fn import_existing_script(conn: &Connection, input: &ImportScriptInput) -> ScriptGenerationResult {
+pub fn import_existing_script(
+    conn: &Connection,
+    input: &ImportScriptInput,
+) -> ScriptGenerationResult {
     let t = now();
     let project_id = uuid();
     let task_id = uuid();
     let clean_body = input.script_body.trim().to_string();
-    let first_line = clean_body.lines().find(|l| !l.trim().is_empty()).unwrap_or("导入剧本").trim().to_string();
+    let first_line = clean_body
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("导入剧本")
+        .trim()
+        .to_string();
     let truncated: String = first_line.chars().take(24).collect();
     let project_name = format!("导入剧本 - {}", truncated);
-    let summary: String = input.input_summary.clone().unwrap_or(first_line).chars().take(200).collect();
+    let summary: String = input
+        .input_summary
+        .clone()
+        .unwrap_or(first_line)
+        .chars()
+        .take(200)
+        .collect();
 
     conn.execute(
         "INSERT INTO projects (id, name, module_type, status, created_at, updated_at) VALUES (?1, ?2, 'script', 'active', ?3, ?4)",
@@ -397,14 +444,26 @@ pub fn import_existing_script(conn: &Connection, input: &ImportScriptInput) -> S
         params![task_id, project_id, summary, input.duration.as_deref().unwrap_or("2分钟"), t, t],
     ).unwrap();
 
-    let raw = serde_json::json!({ "sections": [{ "title": "导入的剧本内容", "content": clean_body }] });
+    let raw =
+        serde_json::json!({ "sections": [{ "title": "导入的剧本内容", "content": clean_body }] });
     conn.execute(
         "INSERT INTO script_outputs (id, task_id, characters_json, plot_outline, script_body, hook_opening, storyboard_base, raw_response, created_at)
          VALUES (?1, ?2, '[]', ?3, ?4, ?5, ?6, ?7, ?8)",
         params![uuid(), task_id, clean_body, clean_body, clean_body, clean_body, raw.to_string(), t],
     ).unwrap();
 
-    ScriptGenerationResult { project_id, task_id, stage: "ready".into(), generated_at: t, project_name, sections: vec![ScriptSection { title: "导入的剧本内容".into(), content: clean_body }], characters: vec![] }
+    ScriptGenerationResult {
+        project_id,
+        task_id,
+        stage: "ready".into(),
+        generated_at: t,
+        project_name,
+        sections: vec![ScriptSection {
+            title: "导入的剧本内容".into(),
+            content: clean_body,
+        }],
+        characters: vec![],
+    }
 }
 
 // ── Script Tasks History ──
@@ -434,12 +493,23 @@ pub fn get_recent_script_tasks(conn: &Connection, limit: i64) -> Vec<ScriptTaskS
     ).unwrap();
     stmt.query_map(params![limit], |row| {
         Ok(ScriptTaskSummary {
-            task_id: row.get(0)?, project_id: row.get(1)?, project_name: row.get(2)?, mode: row.get(3)?,
-            input_summary: row.get::<_, Option<String>>(4)?.unwrap_or_default(), genre: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-            style: row.get::<_, Option<String>>(6)?.unwrap_or_default(), duration: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-            stage: row.get(8)?, updated_at: row.get(9)?, review_score: row.get(10)?, review_status: row.get(11)?,
+            task_id: row.get(0)?,
+            project_id: row.get(1)?,
+            project_name: row.get(2)?,
+            mode: row.get(3)?,
+            input_summary: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            genre: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            style: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+            duration: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+            stage: row.get(8)?,
+            updated_at: row.get(9)?,
+            review_score: row.get(10)?,
+            review_status: row.get(11)?,
         })
-    }).unwrap().filter_map(|r| r.ok()).collect()
+    })
+    .unwrap()
+    .filter_map(|r| r.ok())
+    .collect()
 }
 
 pub fn get_recent_image_tasks(conn: &Connection, limit: i64) -> Vec<serde_json::Value> {
@@ -474,7 +544,9 @@ pub fn load_script_task(conn: &Connection, task_id: &str) -> Option<serde_json::
     ).ok()?;
 
     let outputs: Vec<serde_json::Value> = {
-        let mut stmt = conn.prepare("SELECT * FROM script_outputs WHERE task_id = ?1 ORDER BY created_at DESC").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT * FROM script_outputs WHERE task_id = ?1 ORDER BY created_at DESC")
+            .unwrap();
         stmt.query_map(params![task_id], |row| Ok(serde_json::json!({
             "id": row.get::<_, String>("id").ok(), "taskId": row.get::<_, String>("task_id").ok(),
             "charactersJson": row.get::<_, Option<String>>("characters_json").ok().flatten(),
@@ -502,7 +574,9 @@ pub fn load_script_task(conn: &Connection, task_id: &str) -> Option<serde_json::
     ).ok();
 
     let assets: Vec<serde_json::Value> = {
-        let mut stmt = conn.prepare("SELECT * FROM asset_records WHERE task_id = ?1 ORDER BY created_at").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT * FROM asset_records WHERE task_id = ?1 ORDER BY created_at")
+            .unwrap();
         stmt.query_map(params![task_id], |row| Ok(serde_json::json!({
             "id": row.get::<_, String>("id").ok(), "taskId": row.get::<_, String>("task_id").ok(),
             "assetType": row.get::<_, String>("asset_type").ok(),
@@ -522,37 +596,80 @@ pub fn load_script_task(conn: &Connection, task_id: &str) -> Option<serde_json::
         })),
     ).ok();
 
-    Some(serde_json::json!({ "task": task, "outputs": outputs, "review": review, "assets": assets, "promptOutput": prompt_output }))
+    Some(
+        serde_json::json!({ "task": task, "outputs": outputs, "review": review, "assets": assets, "promptOutput": prompt_output }),
+    )
 }
 
 // ── Delete Tasks ──
 
 pub fn delete_script_task(conn: &Connection, task_id: &str) {
-    for tbl in &["review_records", "script_outputs", "asset_records", "prompt_output_records", "seedance_analysis", "seedance_units"] {
-        conn.execute(&format!("DELETE FROM {} WHERE task_id = ?1", tbl), params![task_id]).ok();
+    for tbl in &[
+        "review_records",
+        "script_outputs",
+        "asset_records",
+        "prompt_output_records",
+        "seedance_analysis",
+        "seedance_units",
+    ] {
+        conn.execute(
+            &format!("DELETE FROM {} WHERE task_id = ?1", tbl),
+            params![task_id],
+        )
+        .ok();
     }
-    conn.execute("DELETE FROM script_tasks WHERE id = ?1", params![task_id]).ok();
+    conn.execute("DELETE FROM script_tasks WHERE id = ?1", params![task_id])
+        .ok();
 }
 
 pub fn delete_image_task(conn: &Connection, task_id: &str) {
-    conn.execute("DELETE FROM image_review_records WHERE task_id = ?1", params![task_id]).ok();
-    conn.execute("DELETE FROM image_outputs WHERE task_id = ?1", params![task_id]).ok();
-    conn.execute("DELETE FROM image_tasks WHERE id = ?1", params![task_id]).ok();
+    conn.execute(
+        "DELETE FROM image_review_records WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
+    conn.execute(
+        "DELETE FROM image_outputs WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
+    conn.execute("DELETE FROM image_tasks WHERE id = ?1", params![task_id])
+        .ok();
 }
 
 pub fn delete_video_task(conn: &Connection, task_id: &str) {
-    conn.execute("DELETE FROM video_review_records WHERE task_id = ?1", params![task_id]).ok();
-    conn.execute("DELETE FROM video_outputs WHERE task_id = ?1", params![task_id]).ok();
-    conn.execute("DELETE FROM video_tasks WHERE id = ?1", params![task_id]).ok();
+    conn.execute(
+        "DELETE FROM video_review_records WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
+    conn.execute(
+        "DELETE FROM video_outputs WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
+    conn.execute("DELETE FROM video_tasks WHERE id = ?1", params![task_id])
+        .ok();
 }
 
 // ── Projects ──
 
 pub fn get_projects(conn: &Connection) -> Vec<serde_json::Value> {
     let mut stmt = conn.prepare("SELECT id, name, module_type, status, created_at, updated_at FROM projects ORDER BY updated_at DESC").unwrap();
-    let rows: Vec<(String, String, String, String, String, String)> = stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
-    }).unwrap().filter_map(|r| r.ok()).collect();
+    let rows: Vec<(String, String, String, String, String, String)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            ))
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
 
     let mut projects = Vec::new();
     for (id, name, module_type, status, _created_at, updated_at) in rows {
@@ -567,7 +684,12 @@ pub fn get_projects(conn: &Connection) -> Vec<serde_json::Value> {
         let mut vt = conn.prepare("SELECT id, mode, stage, updated_at FROM video_tasks WHERE project_id = ?1 ORDER BY updated_at DESC").unwrap();
         vt.query_map(params![id], |row| Ok(serde_json::json!({"taskId": row.get::<_,String>(0).unwrap_or_default(), "moduleType":"video", "mode": row.get::<_,String>(1).unwrap_or_default(), "stage": row.get::<_,String>(2).unwrap_or_default(), "updatedAt": row.get::<_,String>(3).unwrap_or_default() }))).unwrap().for_each(|r| { if let Ok(v) = r { all_tasks.push(v); } });
 
-        all_tasks.sort_by(|a, b| b["updatedAt"].as_str().unwrap_or("").cmp(a["updatedAt"].as_str().unwrap_or("")));
+        all_tasks.sort_by(|a, b| {
+            b["updatedAt"]
+                .as_str()
+                .unwrap_or("")
+                .cmp(a["updatedAt"].as_str().unwrap_or(""))
+        });
 
         projects.push(serde_json::json!({
             "projectId": id, "projectName": name, "moduleType": module_type, "status": status,
@@ -579,33 +701,77 @@ pub fn get_projects(conn: &Connection) -> Vec<serde_json::Value> {
 }
 
 pub fn rename_project(conn: &Connection, project_id: &str, new_name: &str) {
-    conn.execute("UPDATE projects SET name = ?1, updated_at = ?2 WHERE id = ?3", params![new_name.trim(), now(), project_id]).ok();
+    conn.execute(
+        "UPDATE projects SET name = ?1, updated_at = ?2 WHERE id = ?3",
+        params![new_name.trim(), now(), project_id],
+    )
+    .ok();
 }
 
 pub fn delete_project(conn: &Connection, project_id: &str) {
-    let script_tids: Vec<String> = conn.prepare("SELECT id FROM script_tasks WHERE project_id = ?1").unwrap()
-        .query_map(params![project_id], |row| row.get::<_,String>(0)).unwrap().filter_map(|r| r.ok()).collect();
-    let image_tids: Vec<String> = conn.prepare("SELECT id FROM image_tasks WHERE project_id = ?1").unwrap()
-        .query_map(params![project_id], |row| row.get::<_,String>(0)).unwrap().filter_map(|r| r.ok()).collect();
-    let video_tids: Vec<String> = conn.prepare("SELECT id FROM video_tasks WHERE project_id = ?1").unwrap()
-        .query_map(params![project_id], |row| row.get::<_,String>(0)).unwrap().filter_map(|r| r.ok()).collect();
+    let script_tids: Vec<String> = conn
+        .prepare("SELECT id FROM script_tasks WHERE project_id = ?1")
+        .unwrap()
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+    let image_tids: Vec<String> = conn
+        .prepare("SELECT id FROM image_tasks WHERE project_id = ?1")
+        .unwrap()
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+    let video_tids: Vec<String> = conn
+        .prepare("SELECT id FROM video_tasks WHERE project_id = ?1")
+        .unwrap()
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
 
     for tid in &script_tids {
-        for tbl in &["review_records", "script_outputs", "asset_records", "prompt_output_records", "seedance_analysis", "seedance_units", "script_tasks"] {
-            conn.execute(&format!("DELETE FROM {} WHERE task_id = ?1", tbl), params![tid]).ok();
+        for tbl in &[
+            "review_records",
+            "script_outputs",
+            "asset_records",
+            "prompt_output_records",
+            "seedance_analysis",
+            "seedance_units",
+            "script_tasks",
+        ] {
+            conn.execute(
+                &format!("DELETE FROM {} WHERE task_id = ?1", tbl),
+                params![tid],
+            )
+            .ok();
         }
     }
     for tid in &image_tids {
-        conn.execute("DELETE FROM image_review_records WHERE task_id = ?1", params![tid]).ok();
-        conn.execute("DELETE FROM image_outputs WHERE task_id = ?1", params![tid]).ok();
-        conn.execute("DELETE FROM image_tasks WHERE id = ?1", params![tid]).ok();
+        conn.execute(
+            "DELETE FROM image_review_records WHERE task_id = ?1",
+            params![tid],
+        )
+        .ok();
+        conn.execute("DELETE FROM image_outputs WHERE task_id = ?1", params![tid])
+            .ok();
+        conn.execute("DELETE FROM image_tasks WHERE id = ?1", params![tid])
+            .ok();
     }
     for tid in &video_tids {
-        conn.execute("DELETE FROM video_review_records WHERE task_id = ?1", params![tid]).ok();
-        conn.execute("DELETE FROM video_outputs WHERE task_id = ?1", params![tid]).ok();
-        conn.execute("DELETE FROM video_tasks WHERE id = ?1", params![tid]).ok();
+        conn.execute(
+            "DELETE FROM video_review_records WHERE task_id = ?1",
+            params![tid],
+        )
+        .ok();
+        conn.execute("DELETE FROM video_outputs WHERE task_id = ?1", params![tid])
+            .ok();
+        conn.execute("DELETE FROM video_tasks WHERE id = ?1", params![tid])
+            .ok();
     }
-    conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id]).ok();
+    conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id])
+        .ok();
 }
 
 // ── Asset Records ──
@@ -615,10 +781,24 @@ pub fn get_assets_by_task(conn: &Connection, task_id: &str) -> Vec<serde_json::V
     stmt.query_map(params![task_id], |row| Ok(serde_json::json!({"id": row.get::<_,String>(0).unwrap_or_default(), "assetType": row.get::<_,String>(1).unwrap_or_default(), "assetDataJson": row.get::<_,Option<String>>(2).ok().flatten(), "createdAt": row.get::<_,String>(3).unwrap_or_default() }))).unwrap().filter_map(|r| r.ok()).collect()
 }
 
-pub fn update_assets(conn: &Connection, task_id: &str, characters: &str, scenes: &str, props: &str) {
-    conn.execute("DELETE FROM asset_records WHERE task_id = ?1", params![task_id]).ok();
+pub fn update_assets(
+    conn: &Connection,
+    task_id: &str,
+    characters: &str,
+    scenes: &str,
+    props: &str,
+) {
+    conn.execute(
+        "DELETE FROM asset_records WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
     let t = now();
-    for (ty, val) in [("characters", characters), ("scenes", scenes), ("props", props)] {
+    for (ty, val) in [
+        ("characters", characters),
+        ("scenes", scenes),
+        ("props", props),
+    ] {
         conn.execute("INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![uuid(), task_id, ty, val, t]).ok();
     }
@@ -637,47 +817,55 @@ pub fn get_prompt_output_by_task(conn: &Connection, task_id: &str) -> Option<ser
 }
 
 pub fn update_prompt_output(conn: &Connection, task_id: &str, seedance_groups: &str) {
-    conn.execute("UPDATE prompt_output_records SET seedance_groups_json = ?1 WHERE task_id = ?2", params![seedance_groups, task_id]).ok();
+    conn.execute(
+        "UPDATE prompt_output_records SET seedance_groups_json = ?1 WHERE task_id = ?2",
+        params![seedance_groups, task_id],
+    )
+    .ok();
 }
 
-// ── Generation & Review (mock wrappers) ──
+// ── Image/Video Generation & Review wrappers ──
 
 pub fn run_image_generation(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    let task_id = input["taskId"].as_str().unwrap_or("");
-    let t = now();
-    conn.execute("UPDATE image_tasks SET stage = 'ready', updated_at = ?1 WHERE id = ?2", params![t, task_id]).ok();
-    conn.execute("INSERT INTO image_outputs (id, task_id, sections_json, raw_response, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![uuid(), task_id, "[]", "{}", t]).ok();
-    serde_json::json!({"sections": [], "taskId": task_id, "generatedAt": t})
+    tokio::runtime::Handle::current()
+        .block_on(crate::services::prompt_tasks::run_image_prompt_generation(
+            conn, input,
+        ))
+        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_video_generation(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    let task_id = input["taskId"].as_str().unwrap_or("");
-    let t = now();
-    conn.execute("UPDATE video_tasks SET stage = 'ready', updated_at = ?1 WHERE id = ?2", params![t, task_id]).ok();
-    conn.execute("INSERT INTO video_outputs (id, task_id, sections_json, raw_response, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![uuid(), task_id, "[]", "{}", t]).ok();
-    serde_json::json!({"sections": [], "taskId": task_id, "generatedAt": t})
+    tokio::runtime::Handle::current()
+        .block_on(crate::services::prompt_tasks::run_video_prompt_generation(
+            conn, input,
+        ))
+        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_image_review(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    let task_id = input["taskId"].as_str().unwrap_or("");
-    let t = now();
-    conn.execute("INSERT INTO image_review_records (id, task_id, score, status, summary, created_at) VALUES (?1, ?2, 85, 'passed', '自动审核通过', ?3)", params![uuid(), task_id, t]).ok();
-    serde_json::json!({"score": 85, "status": "passed"})
+    tokio::runtime::Handle::current()
+        .block_on(crate::services::prompt_tasks::run_image_prompt_review(
+            conn, input,
+        ))
+        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_video_review(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    let task_id = input["taskId"].as_str().unwrap_or("");
-    let t = now();
-    conn.execute("INSERT INTO video_review_records (id, task_id, score, status, summary, created_at) VALUES (?1, ?2, 85, 'passed', '自动审核通过', ?3)", params![uuid(), task_id, t]).ok();
-    serde_json::json!({"score": 85, "status": "passed"})
+    tokio::runtime::Handle::current()
+        .block_on(crate::services::prompt_tasks::run_video_prompt_review(
+            conn, input,
+        ))
+        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
-pub fn run_script_review(conn: &Connection, input: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub fn run_script_review(
+    conn: &Connection,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let task_id = input["taskId"].as_str().unwrap_or("").to_string();
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::script_review::run_script_review(conn, &task_id))
+    tokio::runtime::Handle::current().block_on(crate::services::script_review::run_script_review(
+        conn, &task_id,
+    ))
 }
 
 // ── Screenplay Finalize ──
@@ -699,7 +887,10 @@ pub struct FinalizeScreenplayResult {
     pub was_create: bool,
 }
 
-pub fn finalize_screenplay(conn: &Connection, input: &FinalizeScreenplayInput) -> FinalizeScreenplayResult {
+pub fn finalize_screenplay(
+    conn: &Connection,
+    input: &FinalizeScreenplayInput,
+) -> FinalizeScreenplayResult {
     let t = now();
     let task_id = uuid();
     let project_id = input.linked_script_task_id.as_ref().and_then(|linked| {
@@ -713,16 +904,29 @@ pub fn finalize_screenplay(conn: &Connection, input: &FinalizeScreenplayInput) -
     conn.execute("INSERT INTO script_tasks (id, project_id, mode, input_summary, duration, stage, created_at, updated_at) VALUES (?1, ?2, 'plot', ?3, ?4, 'ready', ?5, ?6) ON CONFLICT(id) DO UPDATE SET stage = 'ready', updated_at = ?7",
         params![task_id, project_id, input.concept.as_deref().unwrap_or_default(), input.duration, t, t, t]).ok();
 
-    let script_body: String = input.scenes.iter().map(|s| {
-        format!("{}\n{}", s["header"].as_str().unwrap_or(""), s["body"].as_str().unwrap_or(""))
-    }).collect::<Vec<_>>().join("\n\n");
+    let script_body: String = input
+        .scenes
+        .iter()
+        .map(|s| {
+            format!(
+                "{}\n{}",
+                s["header"].as_str().unwrap_or(""),
+                s["body"].as_str().unwrap_or("")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
     let raw = serde_json::json!({"scenes": input.scenes, "doctor": input.doctor});
 
     conn.execute("INSERT INTO script_outputs (id, task_id, characters_json, plot_outline, script_body, raw_response, created_at) VALUES (?1, ?2, '[]', ?3, ?4, ?5, ?6)",
         params![uuid(), task_id, script_body, script_body, raw.to_string(), t]).ok();
 
     let was_create = input.linked_script_task_id.is_none();
-    FinalizeScreenplayResult { project_id, task_id, was_create }
+    FinalizeScreenplayResult {
+        project_id,
+        task_id,
+        was_create,
+    }
 }
 
 // ── Seedance ──
@@ -741,37 +945,56 @@ pub fn seedance_get_analysis(conn: &Connection, task_id: &str) -> Option<serde_j
 }
 
 pub fn seedance_list_units(conn: &Connection, task_id: &str) -> Vec<serde_json::Value> {
-    let mut stmt = conn.prepare("SELECT * FROM seedance_units WHERE task_id = ?1 ORDER BY unit_index").unwrap();
+    let mut stmt = conn
+        .prepare("SELECT * FROM seedance_units WHERE task_id = ?1 ORDER BY unit_index")
+        .unwrap();
     stmt.query_map(params![task_id], |row| Ok(serde_json::json!({"id": row.get::<_,String>("id").ok(), "taskId": row.get::<_,String>("task_id").ok(), "unitIndex": row.get::<_,i32>("unit_index").ok(), "durationSec": row.get::<_,Option<i32>>("duration_sec").ok().flatten(), "sceneType": row.get::<_,Option<String>>("scene_type").ok().flatten(), "subShotCount": row.get::<_,Option<i32>>("sub_shot_count").ok().flatten(), "copyArea": row.get::<_,Option<String>>("copy_area").ok().flatten(), "noteAreaJson": row.get::<_,Option<String>>("note_area_json").ok().flatten(), "status": row.get::<_,String>("status").ok(), "retryCount": row.get::<_,i32>("retry_count").ok(), "errorMessage": row.get::<_,Option<String>>("error_message").ok().flatten(), "createdAt": row.get::<_,String>("created_at").ok(), "updatedAt": row.get::<_,String>("updated_at").ok() }))).unwrap().filter_map(|r| r.ok()).collect()
 }
 
-pub fn seedance_get_unit(conn: &Connection, task_id: &str, unit_index: i32) -> Option<serde_json::Value> {
+pub fn seedance_get_unit(
+    conn: &Connection,
+    task_id: &str,
+    unit_index: i32,
+) -> Option<serde_json::Value> {
     conn.query_row("SELECT * FROM seedance_units WHERE task_id = ?1 AND unit_index = ?2", params![task_id, unit_index], |row| {
         Ok(serde_json::json!({"id": row.get::<_,String>("id").ok(), "taskId": row.get::<_,String>("task_id").ok(), "unitIndex": row.get::<_,i32>("unit_index").ok(), "durationSec": row.get::<_,Option<i32>>("duration_sec").ok().flatten(), "sceneType": row.get::<_,Option<String>>("scene_type").ok().flatten(), "subShotCount": row.get::<_,Option<i32>>("sub_shot_count").ok().flatten(), "copyArea": row.get::<_,Option<String>>("copy_area").ok().flatten(), "noteAreaJson": row.get::<_,Option<String>>("note_area_json").ok().flatten(), "status": row.get::<_,String>("status").ok(), "retryCount": row.get::<_,i32>("retry_count").ok(), "errorMessage": row.get::<_,Option<String>>("error_message").ok().flatten(), "createdAt": row.get::<_,String>("created_at").ok(), "updatedAt": row.get::<_,String>("updated_at").ok() }))
     }).ok()
 }
 
-pub fn seedance_run_unit(conn: &Connection, task_id: &str, unit_index: i32) -> Result<serde_json::Value, String> {
+pub fn seedance_run_unit(
+    conn: &Connection,
+    task_id: &str,
+    unit_index: i32,
+) -> Result<serde_json::Value, String> {
     let tid = task_id.to_string();
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::seedance_service::run_unit_generation(conn, &tid, unit_index as usize))
+    tokio::runtime::Handle::current().block_on(
+        crate::services::seedance_service::run_unit_generation(conn, &tid, unit_index as usize),
+    )
 }
 
 pub fn seedance_run_all(conn: &Connection, task_id: &str) -> Result<serde_json::Value, String> {
     let tid = task_id.to_string();
-    let results = tokio::runtime::Handle::current()
-        .block_on(crate::services::seedance_service::run_generate_all(conn, &tid, None))?;
+    let results = tokio::runtime::Handle::current().block_on(
+        crate::services::seedance_service::run_generate_all(conn, &tid, None),
+    )?;
     Ok(serde_json::json!({"taskId": task_id, "completed": true, "results": results}))
 }
 
 // ── Prompt Generation ──
 
-pub fn run_prompt_generation(conn: &Connection, input: &serde_json::Value) -> Result<serde_json::Value, String> {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_generation::run_prompt_generation(conn, input))
+pub fn run_prompt_generation(
+    conn: &Connection,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    tokio::runtime::Handle::current().block_on(
+        crate::services::prompt_generation::run_prompt_generation(conn, input),
+    )
 }
 
-pub fn run_prompt_group_gen(conn: &Connection, input: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub fn run_prompt_group_gen(
+    conn: &Connection,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     tokio::runtime::Handle::current()
         .block_on(crate::services::prompt_generation::run_prompt_group_generation(conn, input))
 }
@@ -781,17 +1004,33 @@ pub fn get_scene_count(conn: &Connection, task_id: &str) -> Option<i64> {
 }
 
 pub fn get_segment_titles(conn: &Connection, task_id: &str) -> Vec<String> {
-    let s: Option<String> = conn.query_row("SELECT grid_groups_json FROM prompt_output_records WHERE task_id = ?1 LIMIT 1", params![task_id], |row| row.get(0)).ok();
-    s.and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok()).map(|v| v.iter().filter_map(|g| g["title"].as_str().map(String::from)).collect()).unwrap_or_default()
+    let s: Option<String> = conn
+        .query_row(
+            "SELECT grid_groups_json FROM prompt_output_records WHERE task_id = ?1 LIMIT 1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .ok();
+    s.and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+        .map(|v| {
+            v.iter()
+                .filter_map(|g| g["title"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn run_quality_check(_conn: &Connection, _task_id: &str) -> serde_json::Value {
     serde_json::json!({"passed": true, "issues": [], "score": 90})
 }
 
-pub fn generate_outline(conn: &Connection, input: &serde_json::Value) -> Result<serde_json::Value, String> {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_generation::generate_outline(conn, input))
+pub fn generate_outline(
+    conn: &Connection,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    tokio::runtime::Handle::current().block_on(
+        crate::services::prompt_generation::generate_outline(conn, input),
+    )
 }
 
 pub fn confirm_outline(conn: &Connection, input: &serde_json::Value) {
@@ -804,8 +1043,12 @@ pub fn get_outline(conn: &Connection, task_id: &str) -> Option<serde_json::Value
 
 // ── Asset Extraction ──
 
-pub fn run_asset_extraction(conn: &Connection, input: &serde_json::Value) -> Result<serde_json::Value, String> {
+pub fn run_asset_extraction(
+    conn: &Connection,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
     let task_id = input["taskId"].as_str().unwrap_or("").to_string();
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::asset_extraction::run_asset_extraction(conn, &task_id))
+    tokio::runtime::Handle::current().block_on(
+        crate::services::asset_extraction::run_asset_extraction(conn, &task_id),
+    )
 }

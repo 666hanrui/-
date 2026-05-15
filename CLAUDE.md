@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-**CineForge（创剧）** — Tauri 2 桌面应用，实现从剧本到电影的流线化产出。
+**ScriptStack（剧本栈）** — Tauri 2 桌面应用，实现从剧本到电影的流线化产出。
 
 > 完整文档见 [README.md](./README.md)
 

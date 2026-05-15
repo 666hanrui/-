@@ -3,10 +3,12 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::llm::config::RuntimeConfig;
-use crate::llm::server_proxy::{self, ServerLlmParams};
+use crate::llm::server_proxy::{self, PromptLlmParams};
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 fn uuid() -> String {
@@ -89,7 +91,11 @@ fn extract_characters_from_script(script_body: &str) -> Vec<serde_json::Value> {
     let re = regex_lite::Regex::new(r"\*\*(.{1,8})\*\*(?:\s*(?:（[^）]*）))?\s*[：:]").unwrap();
     let mut names: Vec<(String, String)> = Vec::new();
     for cap in re.captures_iter(script_body) {
-        let name = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        let name = cap
+            .get(1)
+            .map(|m| m.as_str().trim())
+            .unwrap_or("")
+            .to_string();
         if name.is_empty() || name.starts_with("场景") || name.starts_with("出场") {
             continue;
         }
@@ -98,7 +104,15 @@ fn extract_characters_from_script(script_body: &str) -> Vec<serde_json::Value> {
         }
         let pos = cap.get(0).map(|m| m.start()).unwrap_or(0);
         let before = &script_body[if pos > 100 { pos - 100 } else { 0 }..pos];
-        let role = if before.contains("女主") { "女主" } else if before.contains("男主") { "男主" } else if before.contains("反派") { "反派" } else { "" };
+        let role = if before.contains("女主") {
+            "女主"
+        } else if before.contains("男主") {
+            "男主"
+        } else if before.contains("反派") {
+            "反派"
+        } else {
+            ""
+        };
         names.push((name, role.to_string()));
     }
     names
@@ -157,8 +171,19 @@ fn extract_props_from_script(_script_body: &str) -> Vec<serde_json::Value> {
     vec![]
 }
 
-fn persist_assets(conn: &Connection, task_id: &str, characters: &[serde_json::Value], scenes: &[serde_json::Value], props: &[serde_json::Value], time: &str) {
-    conn.execute("DELETE FROM asset_records WHERE task_id = ?1", params![task_id]).ok();
+fn persist_assets(
+    conn: &Connection,
+    task_id: &str,
+    characters: &[serde_json::Value],
+    scenes: &[serde_json::Value],
+    props: &[serde_json::Value],
+    time: &str,
+) {
+    conn.execute(
+        "DELETE FROM asset_records WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
     for c in characters {
         conn.execute(
             "INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at) VALUES (?1, ?2, 'character', ?3, ?4)",
@@ -189,8 +214,10 @@ async fn try_extract_array(
     script_body: &str,
 ) -> Option<Vec<serde_json::Value>> {
     for _attempt in 0..2 {
-        let result = server_proxy::request_server_llm(ServerLlmParams {
-            runtime_config: RuntimeConfig { ..runtime_config.clone() },
+        let result = server_proxy::request_prompt_llm(PromptLlmParams {
+            runtime_config: RuntimeConfig {
+                ..runtime_config.clone()
+            },
             prompt_slug: slug.to_string(),
             temperature: Some(0.2),
             user_messages: vec![json!({"role": "user", "content": script_body})],
@@ -221,7 +248,11 @@ fn load_script_body(conn: &Connection, task_id: &str) -> Result<String, String> 
         Ok((Some(body),)) if !body.trim().is_empty() => Ok(body),
         _ => {
             let task_exists: bool = conn
-                .query_row("SELECT 1 FROM script_tasks WHERE id = ?1", params![task_id], |_| Ok(true))
+                .query_row(
+                    "SELECT 1 FROM script_tasks WHERE id = ?1",
+                    params![task_id],
+                    |_| Ok(true),
+                )
                 .unwrap_or(false);
             if !task_exists {
                 Err("找不到该任务，请重新选择或重新创建剧本任务。".into())
@@ -244,7 +275,7 @@ pub async fn run_asset_extraction(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -256,7 +287,9 @@ pub async fn run_asset_extraction(
     let mut fallback_used = false;
 
     // Characters
-    let characters = if let Some(parsed) = try_extract_array(&runtime_config, "asset_character", &script_body).await {
+    let characters = if let Some(parsed) =
+        try_extract_array(&runtime_config, "asset_character", &script_body).await
+    {
         parsed.iter().map(normalize_character).collect()
     } else {
         vec![]
@@ -272,7 +305,9 @@ pub async fn run_asset_extraction(
     };
 
     // Scenes
-    let scenes = if let Some(parsed) = try_extract_array(&runtime_config, "asset_scene", &script_body).await {
+    let scenes = if let Some(parsed) =
+        try_extract_array(&runtime_config, "asset_scene", &script_body).await
+    {
         parsed.iter().map(normalize_scene).collect()
     } else {
         vec![]
@@ -288,7 +323,9 @@ pub async fn run_asset_extraction(
     };
 
     // Props
-    let props = if let Some(parsed) = try_extract_array(&runtime_config, "asset_prop", &script_body).await {
+    let props = if let Some(parsed) =
+        try_extract_array(&runtime_config, "asset_prop", &script_body).await
+    {
         parsed.iter().map(normalize_prop).collect()
     } else {
         vec![]
@@ -302,9 +339,15 @@ pub async fn run_asset_extraction(
     persist_assets(conn, task_id, &characters, &scenes, &props, &time);
 
     let extraction_model = if fallback_used {
-        format!("workfisher-asset-extractor-v2 / {} / regex-fallback", runtime_config.default_model)
+        format!(
+            "local-asset-extractor-v2 / {} / regex-fallback",
+            runtime_config.default_model
+        )
     } else {
-        format!("workfisher-asset-extractor-v2 / {}", runtime_config.default_model)
+        format!(
+            "local-asset-extractor-v2 / {}",
+            runtime_config.default_model
+        )
     };
 
     Ok(json!({
@@ -319,6 +362,12 @@ pub async fn run_asset_extraction(
 }
 
 /// Update assets directly (from user edit).
-pub fn update_assets(conn: &Connection, task_id: &str, characters: &str, scenes: &str, props: &str) {
+pub fn update_assets(
+    conn: &Connection,
+    task_id: &str,
+    characters: &str,
+    scenes: &str,
+    props: &str,
+) {
     crate::db::crud::update_assets(conn, task_id, characters, scenes, props);
 }

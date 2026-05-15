@@ -1,10 +1,12 @@
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
-use crate::utils::v5_parser::{V5Analysis, NoteArea};
+use crate::utils::v5_parser::{NoteArea, V5Analysis};
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 fn uuid() -> String {
@@ -65,12 +67,27 @@ pub fn load_analysis(conn: &Connection, task_id: &str) -> Option<V5Analysis> {
 
 /// Delete all analysis data for a task.
 pub fn delete_analysis(conn: &Connection, task_id: &str) {
-    conn.execute("DELETE FROM seedance_analysis WHERE task_id = ?1", params![task_id])
-        .ok();
+    conn.execute(
+        "DELETE FROM seedance_analysis WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
 }
 
 /// Upsert a single unit record in seedance_units table.
-pub fn upsert_unit(conn: &Connection, task_id: &str, unit_index: i32, duration_sec: Option<i32>, scene_type: &str, sub_shot_count: Option<i32>, copy_area: &str, note_area: &NoteArea, status: &str, retry_count: i32, error_message: Option<&str>) {
+pub fn upsert_unit(
+    conn: &Connection,
+    task_id: &str,
+    unit_index: i32,
+    duration_sec: Option<i32>,
+    scene_type: &str,
+    sub_shot_count: Option<i32>,
+    copy_area: &str,
+    note_area: &NoteArea,
+    status: &str,
+    retry_count: i32,
+    error_message: Option<&str>,
+) {
     let t = now();
     let note_json = serde_json::to_string(note_area).unwrap_or_default();
     conn.execute(
@@ -146,8 +163,11 @@ pub fn get_unit(conn: &Connection, task_id: &str, unit_index: i32) -> Option<ser
 
 /// Delete all units for a task.
 pub fn delete_units(conn: &Connection, task_id: &str) {
-    conn.execute("DELETE FROM seedance_units WHERE task_id = ?1", params![task_id])
-        .ok();
+    conn.execute(
+        "DELETE FROM seedance_units WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
 }
 
 /// Delete a single unit.

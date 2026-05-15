@@ -8,12 +8,14 @@ use tauri::Manager;
 
 mod cmd {
     use crate::db::crud;
+    use crate::llm;
+    use crate::services;
     use crate::services::screenplay;
     use crate::services::screenplay_store;
     use rusqlite::Connection;
+    use sha2::{Digest, Sha256};
     use std::sync::Mutex;
     use tauri::{AppHandle, Emitter, State};
-    use sha2::{Digest, Sha256};
 
     fn with_db<F, R>(state: &State<'_, Mutex<Connection>>, f: F) -> Result<R, String>
     where
@@ -45,7 +47,9 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn get_app_settings(state: State<'_, Mutex<Connection>>) -> Result<crud::AppSettings, String> {
+    pub fn get_app_settings(
+        state: State<'_, Mutex<Connection>>,
+    ) -> Result<crud::AppSettings, String> {
         with_db(&state, crud::get_app_settings)
     }
 
@@ -97,7 +101,9 @@ mod cmd {
                         serde_json::json!({ "ok": false, "latencyMs": latency, "error": format!("HTTP {}: {}", code, &detail[..detail.len().min(200)]) })
                     }
                 }
-                Err(e) => serde_json::json!({ "ok": false, "latencyMs": 0, "error": format!("网络错误：{}", e) }),
+                Err(e) => {
+                    serde_json::json!({ "ok": false, "latencyMs": 0, "error": format!("网络错误：{}", e) })
+                }
             };
         }
 
@@ -143,19 +149,28 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn delete_script_task(state: State<'_, Mutex<Connection>>, task_id: String) -> serde_json::Value {
+    pub fn delete_script_task(
+        state: State<'_, Mutex<Connection>>,
+        task_id: String,
+    ) -> serde_json::Value {
         with_db(&state, |c| crud::delete_script_task(c, &task_id)).ok();
         serde_json::json!({ "success": true, "taskId": task_id })
     }
 
     #[tauri::command]
-    pub fn delete_image_task(state: State<'_, Mutex<Connection>>, task_id: String) -> serde_json::Value {
+    pub fn delete_image_task(
+        state: State<'_, Mutex<Connection>>,
+        task_id: String,
+    ) -> serde_json::Value {
         with_db(&state, |c| crud::delete_image_task(c, &task_id)).ok();
         serde_json::json!({ "success": true, "taskId": task_id })
     }
 
     #[tauri::command]
-    pub fn delete_video_task(state: State<'_, Mutex<Connection>>, task_id: String) -> serde_json::Value {
+    pub fn delete_video_task(
+        state: State<'_, Mutex<Connection>>,
+        task_id: String,
+    ) -> serde_json::Value {
         with_db(&state, |c| crud::delete_video_task(c, &task_id)).ok();
         serde_json::json!({ "success": true, "taskId": task_id })
     }
@@ -215,30 +230,35 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| {
-            let input = crud::ScriptGenerationInput {
-                mode: payload["mode"].as_str().unwrap_or("plot").to_string(),
-                duration: payload["duration"].as_str().map(String::from),
-                input_summary: payload["inputSummary"].as_str().unwrap_or("").to_string(),
-                style_preset: payload["stylePreset"].as_str().map(String::from),
-                genres: payload["genres"].as_str().map(String::from),
-                audience: payload["audience"].as_str().map(String::from),
-                tone: payload["tone"].as_str().map(String::from),
-                ending: payload["ending"].as_str().map(String::from),
-                output_mode: payload["outputMode"].as_str().map(String::from),
-                episodes: payload["episodes"].as_str().map(String::from),
-                custom_style: payload["customStyle"].as_str().map(String::from),
-                existing_project_id: payload["existingProjectId"].as_str().map(String::from),
-                existing_task_id: payload["existingTaskId"].as_str().map(String::from),
-            };
-            let sections = crud::fallback_sections(&input.mode);
-            let result = crud::save_script_generation(c, &input, sections, vec![], None);
-            serde_json::to_value(&result).unwrap_or_default()
-        })
+        let input = crud::ScriptGenerationInput {
+            mode: payload["mode"].as_str().unwrap_or("plot").to_string(),
+            duration: payload["duration"].as_str().map(String::from),
+            input_summary: payload["inputSummary"].as_str().unwrap_or("").to_string(),
+            style_preset: payload["stylePreset"].as_str().map(String::from),
+            genres: payload["genres"].as_str().map(String::from),
+            audience: payload["audience"].as_str().map(String::from),
+            tone: payload["tone"].as_str().map(String::from),
+            ending: payload["ending"].as_str().map(String::from),
+            output_mode: payload["outputMode"].as_str().map(String::from),
+            episodes: payload["episodes"].as_str().map(String::from),
+            custom_style: payload["customStyle"].as_str().map(String::from),
+            existing_project_id: payload["existingProjectId"].as_str().map(String::from),
+            existing_task_id: payload["existingTaskId"].as_str().map(String::from),
+        };
+
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        let result = tokio::runtime::Handle::current().block_on(
+            crate::services::script_generation::run_script_generation(&conn, &input, None),
+        )?;
+        serde_json::to_value(&result).map_err(|e| e.to_string())
     }
 
     #[tauri::command]
-    pub fn update_script_body(state: State<'_, Mutex<Connection>>, task_id: String, new_body: String) {
+    pub fn update_script_body(
+        state: State<'_, Mutex<Connection>>,
+        task_id: String,
+        new_body: String,
+    ) {
         with_db(&state, |c| crud::update_script_body(c, &task_id, &new_body)).ok();
     }
 
@@ -263,7 +283,10 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| crud::run_image_generation(c, &payload))
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        tokio::runtime::Handle::current().block_on(
+            crate::services::prompt_tasks::run_image_prompt_generation(&conn, &payload),
+        )
     }
 
     #[tauri::command]
@@ -271,7 +294,10 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| crud::run_video_generation(c, &payload))
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        tokio::runtime::Handle::current().block_on(
+            crate::services::prompt_tasks::run_video_prompt_generation(&conn, &payload),
+        )
     }
 
     #[tauri::command]
@@ -279,7 +305,10 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| crud::run_image_review(c, &payload))
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        tokio::runtime::Handle::current().block_on(
+            crate::services::prompt_tasks::run_image_prompt_review(&conn, &payload),
+        )
     }
 
     #[tauri::command]
@@ -287,7 +316,10 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| crud::run_video_review(c, &payload))
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        tokio::runtime::Handle::current().block_on(
+            crate::services::prompt_tasks::run_video_prompt_review(&conn, &payload),
+        )
     }
 
     #[tauri::command]
@@ -315,7 +347,10 @@ mod cmd {
         scenes: String,
         props: String,
     ) {
-        with_db(&state, |c| crud::update_assets(c, &task_id, &characters, &scenes, &props)).ok();
+        with_db(&state, |c| {
+            crud::update_assets(c, &task_id, &characters, &scenes, &props)
+        })
+        .ok();
     }
 
     #[tauri::command]
@@ -337,8 +372,15 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn update_prompt_output(state: State<'_, Mutex<Connection>>, task_id: String, seedance_groups: String) {
-        with_db(&state, |c| crud::update_prompt_output(c, &task_id, &seedance_groups)).ok();
+    pub fn update_prompt_output(
+        state: State<'_, Mutex<Connection>>,
+        task_id: String,
+        seedance_groups: String,
+    ) {
+        with_db(&state, |c| {
+            crud::update_prompt_output(c, &task_id, &seedance_groups)
+        })
+        .ok();
     }
 
     #[tauri::command]
@@ -464,8 +506,11 @@ mod cmd {
         let task_id = payload["taskId"].as_str().unwrap_or("").to_string();
         let conn = state.lock().map_err(|e| e.to_string())?;
         let result = crud::seedance_run_all(&conn, &task_id)?;
-        app.emit("seedance:progress", serde_json::json!({ "taskId": task_id, "progress": 1.0 }))
-            .ok();
+        app.emit(
+            "seedance:progress",
+            serde_json::json!({ "taskId": task_id, "progress": 1.0 }),
+        )
+        .ok();
         Ok(result)
     }
 
@@ -492,7 +537,25 @@ mod cmd {
 
     #[tauri::command]
     pub fn set_auth_token(_app: AppHandle, token: String, _refresh_token: String) {
-        std::env::set_var("CINEFORGE_AUTH_TOKEN", &token);
+        std::env::set_var("SCRIPTSTACK_AUTH_TOKEN", &token);
+    }
+
+    #[tauri::command]
+    pub fn auth_status(
+        state: State<'_, Mutex<Connection>>,
+    ) -> serde_json::Value {
+        let token = std::env::var("SCRIPTSTACK_AUTH_TOKEN").unwrap_or_default();
+        if token.is_empty() {
+            return serde_json::json!({ "loggedIn": false });
+        }
+        match with_db(&state, |c| {
+            let mut stmt = c.prepare("SELECT username FROM users WHERE token = ?1").ok()?;
+            let username = stmt.query_row([&token], |r| r.get::<_, String>(0)).ok()?;
+            Some(serde_json::json!({ "loggedIn": true, "username": username, "token": token }))
+        }) {
+            Ok(Some(v)) => v,
+            _ => serde_json::json!({ "loggedIn": false }),
+        }
     }
 
     fn hash_password(password: &str, salt: &str) -> String {
@@ -512,14 +575,15 @@ mod cmd {
             let mut stmt = c
                 .prepare("SELECT password_hash, salt, email FROM users WHERE username = ?1")
                 .ok()?;
-            let row = stmt.query_row([&username], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                ))
-            })
-            .ok()?;
+            let row = stmt
+                .query_row([&username], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .ok()?;
             Some(row)
         });
 
@@ -549,7 +613,6 @@ mod cmd {
         password: String,
         email: String,
     ) -> serde_json::Value {
-        // Check if user exists
         let exists = with_db(&state, |c| {
             c.query_row(
                 "SELECT COUNT(*) FROM users WHERE username = ?1",
@@ -620,9 +683,7 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn screenplay_create_project(
-        init: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
+    pub fn screenplay_create_project(init: serde_json::Value) -> Result<serde_json::Value, String> {
         let project_init = screenplay_store::ProjectInit {
             name: init["name"].as_str().map(String::from),
             concept: init["concept"].as_str().map(String::from),
@@ -645,16 +706,12 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn screenplay_get_project(
-        project_id: String,
-    ) -> Result<Option<serde_json::Value>, String> {
+    pub fn screenplay_get_project(project_id: String) -> Result<Option<serde_json::Value>, String> {
         Ok(screenplay::get_project(&project_id).and_then(|r| serde_json::to_value(r).ok()))
     }
 
     #[tauri::command]
-    pub fn screenplay_list_recent_projects(
-        limit: Option<usize>,
-    ) -> Vec<serde_json::Value> {
+    pub fn screenplay_list_recent_projects(limit: Option<usize>) -> Vec<serde_json::Value> {
         screenplay::list_recent_projects(limit.unwrap_or(20))
     }
 
@@ -665,9 +722,7 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn screenplay_update_step_structured(
-        payload: serde_json::Value,
-    ) -> serde_json::Value {
+    pub fn screenplay_update_step_structured(payload: serde_json::Value) -> serde_json::Value {
         let pid = payload["projectId"].as_str().unwrap_or("");
         let step = payload["stepNumber"].as_i64().unwrap_or(1) as u8;
         let structured = payload["structured"].clone();
@@ -709,16 +764,13 @@ mod cmd {
         };
         let settings_json = serde_json::to_value(&settings).unwrap_or_default();
 
-        screenplay::generate_step_async(
-            settings_json, &pid, step, feedback,
-            |chunk| {
-                app.emit(
-                    "screenplay:stream-chunk",
-                    serde_json::json!({ "projectId": pid, "stepNumber": step, "chunk": chunk }),
-                )
-                .ok();
-            },
-        )
+        screenplay::generate_step_async(settings_json, &pid, step, feedback, |chunk| {
+            app.emit(
+                "screenplay:stream-chunk",
+                serde_json::json!({ "projectId": pid, "stepNumber": step, "chunk": chunk }),
+            )
+            .ok();
+        })
         .await
     }
 
@@ -737,21 +789,20 @@ mod cmd {
         };
         let settings_json = serde_json::to_value(&settings).unwrap_or_default();
 
-        screenplay::selfcheck_step_async(
-            settings_json, &pid, step,
-            |chunk| {
-                app.emit(
-                    "screenplay:stream-chunk",
-                    serde_json::json!({ "projectId": pid, "stepNumber": step, "chunk": chunk }),
-                )
-                .ok();
-            },
-        )
+        screenplay::selfcheck_step_async(settings_json, &pid, step, |chunk| {
+            app.emit(
+                "screenplay:stream-chunk",
+                serde_json::json!({ "projectId": pid, "stepNumber": step, "chunk": chunk }),
+            )
+            .ok();
+        })
         .await
     }
 
     #[tauri::command]
-    pub fn screenplay_get_cached_selfcheck(payload: serde_json::Value) -> Option<serde_json::Value> {
+    pub fn screenplay_get_cached_selfcheck(
+        payload: serde_json::Value,
+    ) -> Option<serde_json::Value> {
         let pid = payload["projectId"].as_str().unwrap_or("");
         let step = payload["stepNumber"].as_i64().unwrap_or(1) as u8;
         screenplay::get_cached_selfcheck(pid, step)
@@ -813,7 +864,10 @@ mod cmd {
         payload: serde_json::Value,
     ) -> Result<String, String> {
         let pid = payload["projectId"].as_str().unwrap_or("").to_string();
-        let trigger = payload["trigger"].as_str().unwrap_or("after-step-6").to_string();
+        let trigger = payload["trigger"]
+            .as_str()
+            .unwrap_or("after-step-6")
+            .to_string();
 
         let settings = {
             let conn = state.lock().map_err(|e| e.to_string())?;
@@ -822,6 +876,71 @@ mod cmd {
         let settings_json = serde_json::to_value(&settings).unwrap_or_default();
 
         screenplay::generate_checkpoint_async(settings_json, &pid, &trigger).await
+    }
+
+    // ── Doctor Diagnose (AI 医生自由问答) ──
+
+    #[tauri::command]
+    pub async fn doctor_diagnose(
+        app: AppHandle,
+        state: State<'_, Mutex<Connection>>,
+        question: String,
+        project_id: String,
+    ) -> Result<String, String> {
+        let settings = {
+            let conn = state.lock().map_err(|e| e.to_string())?;
+            crud::get_app_settings(&conn)
+        };
+        let runtime_config = llm::config::RuntimeConfig {
+            api_key: settings.text_key,
+            api_base_url: settings.text_endpoint,
+            default_model: settings.text_model,
+            text_mode: settings.text_mode,
+            mode: String::new(),
+            image_endpoint: String::new(),
+            image_key: String::new(),
+            image_model: String::new(),
+            review_threshold: settings.review_threshold as u8,
+            enable_local_save: settings.enable_local_save,
+        };
+
+        if runtime_config.api_key.is_empty() || runtime_config.api_base_url.is_empty() {
+            return Err("API 未配置, 请先到设置页填写文字模型 API 地址和密钥.".into());
+        }
+
+        // Load project context
+        let rec = services::screenplay_store::load_project(&project_id)
+            .ok_or("Project not found")?;
+        let project_snapshot =
+            services::screenplay_store::build_project_snapshot(&project_id);
+
+        let context_params = serde_json::json!({
+            "init": rec.init,
+            "projectSnapshot": project_snapshot,
+            "question": question,
+        });
+
+        let params = llm::server_proxy::ContextualLlmParams {
+            runtime_config,
+            context_type: "screenplay_checkpoint".into(),
+            context_params,
+            temperature: Some(0.7),
+            max_tokens_override: Some(4096),
+        };
+
+        let mut full_text = String::new();
+        llm::server_proxy::request_contextual_llm_stream(params, |chunk| {
+            full_text.push_str(chunk);
+            app.emit(
+                "doctor:stream-chunk",
+                serde_json::json!({ "projectId": project_id, "chunk": chunk }),
+            )
+            .ok();
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        Ok(full_text.trim().to_string())
     }
 
     // ── File dialogs ──
@@ -849,7 +968,7 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .expect("failed to resolve app data dir")
-                .join("cineforge.db");
+                .join("scriptstack.db");
 
             if let Some(parent) = db_path.parent() {
                 std::fs::create_dir_all(parent).ok();
@@ -859,10 +978,13 @@ pub fn run() {
             app.manage(Mutex::new(conn));
 
             // Initialize screenplay projects directory
-            let app_data = app.path().app_data_dir().expect("failed to resolve app data dir");
+            let app_data = app
+                .path()
+                .app_data_dir()
+                .expect("failed to resolve app data dir");
             services::screenplay_store::init_projects_dir(&app_data);
 
-            log::info!("CineForge started, database at: {:?}", db_path);
+            log::info!("ScriptStack started, database at: {:?}", db_path);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -912,6 +1034,7 @@ pub fn run() {
             cmd::seedance_list_units,
             cmd::seedance_get_unit,
             cmd::set_auth_token,
+            cmd::auth_status,
             cmd::auth_login,
             cmd::auth_register,
             cmd::auth_refresh,
@@ -933,9 +1056,10 @@ pub fn run() {
             cmd::screenplay_set_step_selection,
             cmd::screenplay_get_checkpoint,
             cmd::screenplay_regenerate_checkpoint,
+            cmd::doctor_diagnose,
             cmd::select_text_file,
             cmd::select_image_file,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running CineForge");
+        .expect("error while running ScriptStack");
 }

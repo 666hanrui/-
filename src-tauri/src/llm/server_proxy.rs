@@ -10,36 +10,36 @@ pub struct ContextualLlmParams {
 }
 
 #[derive(Debug)]
-pub struct ServerLlmParams {
+pub struct PromptLlmParams {
     pub runtime_config: RuntimeConfig,
     pub prompt_slug: String,
     pub user_messages: Vec<serde_json::Value>,
     pub temperature: Option<f32>,
 }
 
-/// Non-streaming server LLM call: builds prompt via build_prompt_slug(),
-/// calls the LLM directly, returns the full response text.
-pub async fn request_server_llm(params: ServerLlmParams) -> Result<String, String> {
+/// Non-streaming LLM call: builds a local prompt via build_prompt_slug(),
+/// calls the user-configured model endpoint directly, returns the full response text.
+pub async fn request_prompt_llm(params: PromptLlmParams) -> Result<String, String> {
     let mut full = String::new();
     {
         let mut collect = |chunk: &str| full.push_str(chunk);
-        request_server_llm_inner(&params, &mut collect).await?;
+        request_prompt_llm_inner(&params, &mut collect).await?;
     }
     Ok(full)
 }
 
-/// Streaming server LLM call: builds prompt via build_prompt_slug(),
-/// calls the LLM directly, delivering chunks to on_chunk callback.
+/// Streaming LLM call: builds a local prompt via build_prompt_slug(),
+/// calls the user-configured model endpoint directly, delivering chunks to on_chunk callback.
 /// Returns the full response text.
-pub async fn request_server_llm_stream(
-    params: ServerLlmParams,
+pub async fn request_prompt_llm_stream(
+    params: PromptLlmParams,
     on_chunk: impl FnMut(&str),
 ) -> Result<String, String> {
-    request_server_llm_inner(&params, on_chunk).await
+    request_prompt_llm_inner(&params, on_chunk).await
 }
 
-async fn request_server_llm_inner(
-    params: &ServerLlmParams,
+async fn request_prompt_llm_inner(
+    params: &PromptLlmParams,
     mut on_chunk: impl FnMut(&str),
 ) -> Result<String, String> {
     let (system_prompt, user_messages) =
@@ -54,19 +54,24 @@ async fn request_server_llm_inner(
     let temperature = resolve_temperature(model, params.temperature);
 
     if cfg.api_key.is_empty() || cfg.api_base_url.is_empty() {
-        return Err("API 未配置，无法发起远程调用。".into());
+        return Err("API 未配置，无法发起模型调用。".into());
     }
 
-    match mode.as_str() {
-        "gemini" => request_gemini(cfg, model, &messages, temperature, &mut on_chunk).await,
-        "anthropic" => request_anthropic_stream(cfg, model, &messages, temperature, &mut on_chunk).await,
-        _ => request_openai_stream(cfg, model, &messages, temperature, &mut on_chunk, 8192).await,
-    }
+    request_configured_llm(
+        cfg,
+        model,
+        mode,
+        &messages,
+        temperature,
+        8192,
+        &mut on_chunk,
+    )
+    .await
 }
 
 pub async fn request_contextual_llm_stream(
     params: ContextualLlmParams,
-    on_chunk: impl FnMut(&str),
+    mut on_chunk: impl FnMut(&str),
 ) -> Result<String, String> {
     let (system_prompt, user_prompt) =
         crate::llm::prompts::build_prompt(&params.context_type, &params.context_params);
@@ -83,14 +88,19 @@ pub async fn request_contextual_llm_stream(
     let max_tokens = params.max_tokens_override.unwrap_or(8192);
 
     if cfg.api_key.is_empty() || cfg.api_base_url.is_empty() {
-        return Err("API 未配置，无法发起远程调用。".into());
+        return Err("API 未配置，无法发起模型调用。".into());
     }
 
-    match mode.as_str() {
-        "gemini" => request_gemini(cfg, model, &messages, temperature, on_chunk).await,
-        "anthropic" => request_anthropic_stream(cfg, model, &messages, temperature, on_chunk).await,
-        _ => request_openai_stream(cfg, model, &messages, temperature, on_chunk, max_tokens).await,
-    }
+    request_configured_llm(
+        cfg,
+        model,
+        mode,
+        &messages,
+        temperature,
+        max_tokens,
+        &mut on_chunk,
+    )
+    .await
 }
 
 /// Test connectivity to a configured LLM endpoint.
@@ -146,24 +156,31 @@ pub async fn test_connection(
     }
 
     let detail = response.text().await.unwrap_or_default();
-    let upstream = extract_upstream_error(&detail);
+    let provider_error = extract_provider_error(&detail);
 
     let msg = match status.as_u16() {
         400 => {
             if looks_like_model_error(&detail) {
-                format!("模型名无效：{}", upstream.unwrap_or_else(|| "上游拒绝该模型".into()))
+                format!(
+                    "模型名无效：{}",
+                    provider_error.unwrap_or_else(|| "模型端点拒绝该模型".into())
+                )
             } else {
-                format!("请求参数错误（400）{}", upstream_msg(upstream))
+                format!("请求参数错误（400）{}", provider_msg(provider_error))
             }
         }
-        401 => format!("API Key 无效或已过期{}", upstream_msg(upstream)),
-        403 => format!("权限不足或配额耗尽{}", upstream_msg(upstream)),
-        404 => format!("端点路径不存在（404）{}", upstream_msg(upstream)),
-        429 => format!("请求过频或配额耗尽（429）{}", upstream_msg(upstream)),
+        401 => format!("API Key 无效或已过期{}", provider_msg(provider_error)),
+        403 => format!("权限不足或配额耗尽{}", provider_msg(provider_error)),
+        404 => format!("端点路径不存在（404）{}", provider_msg(provider_error)),
+        429 => format!("请求过频或配额耗尽（429）{}", provider_msg(provider_error)),
         _ if status.as_u16() >= 500 => {
-            format!("上游服务异常（{}）{}", status.as_u16(), upstream_msg(upstream))
+            format!(
+                "模型服务异常（{}）{}",
+                status.as_u16(),
+                provider_msg(provider_error)
+            )
         }
-        _ => format!("HTTP {}{}", status.as_u16(), upstream_msg(upstream)),
+        _ => format!("HTTP {}{}", status.as_u16(), provider_msg(provider_error)),
     };
 
     Ok((false, latency, msg))
@@ -289,6 +306,22 @@ fn build_gemini_body(messages: &[serde_json::Value]) -> serde_json::Value {
 
 // ── API callers ──
 
+async fn request_configured_llm(
+    cfg: &RuntimeConfig,
+    model: &str,
+    mode: &str,
+    messages: &[serde_json::Value],
+    temperature: f32,
+    max_tokens: u32,
+    on_chunk: &mut impl FnMut(&str),
+) -> Result<String, String> {
+    match mode {
+        "gemini" => request_gemini(cfg, model, messages, temperature, on_chunk).await,
+        "anthropic" => request_anthropic_stream(cfg, model, messages, temperature, on_chunk).await,
+        _ => request_openai_stream(cfg, model, messages, temperature, on_chunk, max_tokens).await,
+    }
+}
+
 async fn request_openai_stream(
     cfg: &RuntimeConfig,
     model: &str,
@@ -313,7 +346,11 @@ async fn request_openai_stream(
     let status = response.status();
     if !status.is_success() {
         let detail = response.text().await.unwrap_or_default();
-        return Err(format!("OpenAI 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
+        return Err(format!(
+            "OpenAI 调用失败（{}）：{}",
+            status.as_u16(),
+            &detail[..detail.len().min(200)]
+        ));
     }
 
     parse_openai_sse(response, &mut on_chunk).await
@@ -561,12 +598,13 @@ fn urlencoding(s: &str) -> String {
     result
 }
 
-fn extract_upstream_error(detail: &str) -> Option<String> {
+fn extract_provider_error(detail: &str) -> Option<String> {
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(detail) {
         let e = parsed.get("error")?;
         let msg = match e {
             serde_json::Value::String(s) => Some(s.clone()),
-            _ => e.get("message")
+            _ => e
+                .get("message")
                 .or_else(|| e.get("msg"))
                 .or_else(|| e.get("reason"))
                 .and_then(|v| v.as_str())
@@ -576,12 +614,15 @@ fn extract_upstream_error(detail: &str) -> Option<String> {
     }
     // Try top-level "message" field if no "error" field
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(detail) {
-        return parsed.get("message").and_then(|v| v.as_str()).map(String::from);
+        return parsed
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(String::from);
     }
     None
 }
 
-fn upstream_msg(msg: Option<String>) -> String {
+fn provider_msg(msg: Option<String>) -> String {
     match msg {
         Some(s) if !s.is_empty() => format!("：{}", &s[..s.len().min(200)]),
         _ => String::new(),
@@ -605,6 +646,10 @@ trait IntoOption {
 
 impl IntoOption for String {
     fn into_option(self) -> Option<String> {
-        if self.is_empty() { None } else { Some(self) }
+        if self.is_empty() {
+            None
+        } else {
+            Some(self)
+        }
     }
 }

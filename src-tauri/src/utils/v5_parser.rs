@@ -157,7 +157,9 @@ fn parse_section_refs(s: &str) -> Vec<String> {
 
 fn normalize_scene_type(s: &str) -> String {
     match s.trim() {
-        "文戏" | "快节奏文戏" | "武戏" | "环境戏" | "动作非武戏" => s.trim().to_string(),
+        "文戏" | "快节奏文戏" | "武戏" | "环境戏" | "动作非武戏" => {
+            s.trim().to_string()
+        }
         _ => "文戏".to_string(),
     }
 }
@@ -182,7 +184,10 @@ const PARA_FIELD_MAP: &[(&str, &str)] = &[
 fn map_para_field(key: &str, value: &str) -> Option<(String, serde_json::Value)> {
     for (k, mapped) in PARA_FIELD_MAP {
         if key.eq_ignore_ascii_case(k) {
-            return Some((mapped.to_string(), serde_json::Value::String(value.to_string())));
+            return Some((
+                mapped.to_string(),
+                serde_json::Value::String(value.to_string()),
+            ));
         }
     }
     None
@@ -197,12 +202,18 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
     let meta_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "META").collect();
     let para_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "PARA").collect();
     let peak_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "PEAK").collect();
-    let buffer_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "BUFFER").collect();
-    let subtext_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "SUBTEXT").collect();
+    let buffer_blocks: Vec<&TypedBlock> =
+        blocks.iter().filter(|b| b.type_name == "BUFFER").collect();
+    let subtext_blocks: Vec<&TypedBlock> =
+        blocks.iter().filter(|b| b.type_name == "SUBTEXT").collect();
     let unit_blocks: Vec<&TypedBlock> = blocks.iter().filter(|b| b.type_name == "UNIT").collect();
 
     // META
-    let meta = meta_blocks.first().map(|b| &b.fields).cloned().unwrap_or_default();
+    let meta = meta_blocks
+        .first()
+        .map(|b| &b.fields)
+        .cloned()
+        .unwrap_or_default();
     let structure_type = meta
         .get("structureType")
         .or_else(|| meta.get("结构类型"))
@@ -241,8 +252,18 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
         .iter()
         .map(|b| Peak {
             section_id: b.id.clone(),
-            kind: b.fields.get("kind").or_else(|| b.fields.get("类型")).cloned().unwrap_or_else(|| "其他".to_string()),
-            original_ref: b.fields.get("originalRef").or_else(|| b.fields.get("原文引用")).cloned().unwrap_or_default(),
+            kind: b
+                .fields
+                .get("kind")
+                .or_else(|| b.fields.get("类型"))
+                .cloned()
+                .unwrap_or_else(|| "其他".to_string()),
+            original_ref: b
+                .fields
+                .get("originalRef")
+                .or_else(|| b.fields.get("原文引用"))
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -250,7 +271,12 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
         .iter()
         .map(|b| Buffer {
             section_id: b.id.clone(),
-            reason: b.fields.get("reason").or_else(|| b.fields.get("原因")).cloned().unwrap_or_default(),
+            reason: b
+                .fields
+                .get("reason")
+                .or_else(|| b.fields.get("原因"))
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -258,7 +284,12 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
         .iter()
         .map(|b| Subtext {
             section_id: b.id.clone(),
-            description: b.fields.get("description").or_else(|| b.fields.get("描述")).cloned().unwrap_or_default(),
+            description: b
+                .fields
+                .get("description")
+                .or_else(|| b.fields.get("描述"))
+                .cloned()
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -272,13 +303,54 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
             let scene_id = scene_id_raw.and_then(|s| s.parse::<usize>().ok());
             V5UnitPlan {
                 index,
-                section_refs: parse_section_refs(b.fields.get("sectionRefs").or_else(|| b.fields.get("段号引用")).map(|s| s.as_str()).unwrap_or("")),
-                duration_sec: parse_int_safe(b.fields.get("durationSec").or_else(|| b.fields.get("时长秒")).map(|s| s.as_str()).unwrap_or(""), 13),
-                scene_type: normalize_scene_type(b.fields.get("sceneType").or_else(|| b.fields.get("场景类型")).map(|s| s.as_str()).unwrap_or("")),
-                sub_shot_count: parse_int_safe(b.fields.get("subShotCount").or_else(|| b.fields.get("分镜数")).map(|s| s.as_str()).unwrap_or(""), 3),
-                summary: b.fields.get("summary").or_else(|| b.fields.get("摘要")).cloned().unwrap_or_default(),
-                planned_entry_state: b.fields.get("plannedEntryState").or_else(|| b.fields.get("起幅锚点")).cloned().unwrap_or_default(),
-                planned_exit_state: b.fields.get("plannedExitState").or_else(|| b.fields.get("落幅锚点")).cloned().unwrap_or_default(),
+                section_refs: parse_section_refs(
+                    b.fields
+                        .get("sectionRefs")
+                        .or_else(|| b.fields.get("段号引用"))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                ),
+                duration_sec: parse_int_safe(
+                    b.fields
+                        .get("durationSec")
+                        .or_else(|| b.fields.get("时长秒"))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                    13,
+                ),
+                scene_type: normalize_scene_type(
+                    b.fields
+                        .get("sceneType")
+                        .or_else(|| b.fields.get("场景类型"))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                ),
+                sub_shot_count: parse_int_safe(
+                    b.fields
+                        .get("subShotCount")
+                        .or_else(|| b.fields.get("分镜数"))
+                        .map(|s| s.as_str())
+                        .unwrap_or(""),
+                    3,
+                ),
+                summary: b
+                    .fields
+                    .get("summary")
+                    .or_else(|| b.fields.get("摘要"))
+                    .cloned()
+                    .unwrap_or_default(),
+                planned_entry_state: b
+                    .fields
+                    .get("plannedEntryState")
+                    .or_else(|| b.fields.get("起幅锚点"))
+                    .cloned()
+                    .unwrap_or_default(),
+                planned_exit_state: b
+                    .fields
+                    .get("plannedExitState")
+                    .or_else(|| b.fields.get("落幅锚点"))
+                    .cloned()
+                    .unwrap_or_default(),
                 scene_id,
             }
         })
@@ -294,14 +366,26 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
         warnings.push("0 PARA blocks · 异常 (段落标注为空)".to_string());
     }
     if units.len() > 0 && total_units > 0 && total_units != units.len() {
-        warnings.push(format!("totalUnits={} 但实际 {} 个 UNIT · 用实际数", total_units, units.len()));
+        warnings.push(format!(
+            "totalUnits={} 但实际 {} 个 UNIT · 用实际数",
+            total_units,
+            units.len()
+        ));
     }
-    let resolved_total_units = if units.is_empty() { total_units } else { units.len() };
+    let resolved_total_units = if units.is_empty() {
+        total_units
+    } else {
+        units.len()
+    };
 
     V5Analysis {
         paragraph_facts,
         structure_type,
-        emotion_map: EmotionMap { peaks, buffers, subtexts },
+        emotion_map: EmotionMap {
+            peaks,
+            buffers,
+            subtexts,
+        },
         units,
         total_sec,
         total_units: resolved_total_units,
@@ -310,17 +394,25 @@ pub fn parse_v5_analysis(markdown: &str) -> V5Analysis {
 }
 
 /// Merge LLM-returned facts with the authoritative paragraphIndex text from the caller.
-pub fn merge_v5_analysis(parsed: V5Analysis, server_paragraph_index: Vec<ParagraphIndexItem>) -> V5Analysis {
+pub fn merge_v5_analysis(
+    parsed: V5Analysis,
+    local_paragraph_index: Vec<ParagraphIndexItem>,
+) -> V5Analysis {
     let facts_map: std::collections::HashMap<String, serde_json::Value> = parsed
         .paragraph_facts
         .iter()
         .map(|pf| (pf.id.clone(), pf.facts.clone()))
         .collect();
 
-    let _merged_paragraph_index: Vec<ParagraphIndexItem> = server_paragraph_index
+    let _merged_paragraph_index: Vec<ParagraphIndexItem> = local_paragraph_index
         .into_iter()
         .map(|p| ParagraphIndexItem {
-            facts: Some(facts_map.get(&p.id).cloned().unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()))),
+            facts: Some(
+                facts_map
+                    .get(&p.id)
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())),
+            ),
             ..p
         })
         .collect();
@@ -390,14 +482,16 @@ pub fn parse_dual_region(text: &str) -> DualRegion {
     }
 
     // Parse NOTE area
-    let mut self_check_report: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut self_check_report: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut in_traceback = false;
     let mut in_next_hint = false;
     let mut traceback_lines: Vec<String> = Vec::new();
     let mut next_hint_lines: Vec<String> = Vec::new();
 
     let traceback_header_re = regex_lite::Regex::new(r"(?i)^##\s*(段号溯源|溯源)").unwrap();
-    let next_hint_header_re = regex_lite::Regex::new(r"(?i)^##\s*(下一单元衔接参考|衔接参考|nextUnitHint|next)").unwrap();
+    let next_hint_header_re =
+        regex_lite::Regex::new(r"(?i)^##\s*(下一单元衔接参考|衔接参考|nextUnitHint|next)").unwrap();
     let selfcheck_header_re = regex_lite::Regex::new(r"(?i)^##\s*(自检报告|自检)").unwrap();
     let selfcheck_item_re = regex_lite::Regex::new(r"^(G-?\d+(?:\.\d+)?)[:\s：]+(.+)$").unwrap();
 
@@ -422,7 +516,11 @@ pub fn parse_dual_region(text: &str) -> DualRegion {
         if let Some(cap) = selfcheck_item_re.captures(trimmed) {
             let key = cap.get(1).unwrap().as_str().replace(' ', "");
             let val = cap.get(2).unwrap().as_str().trim().to_string();
-            let status = if val.contains('❌') || val.contains("fail") || val.contains("失败") || val.contains("违反") {
+            let status = if val.contains('❌')
+                || val.contains("fail")
+                || val.contains("失败")
+                || val.contains("违反")
+            {
                 "fail"
             } else if val.contains('⚠') || val.contains("warn") || val.contains("警告") {
                 "warn"
@@ -449,7 +547,11 @@ pub fn parse_dual_region(text: &str) -> DualRegion {
         note_area: NoteArea {
             traceback,
             self_check_report,
-            next_unit_hint: if next_unit_hint.is_empty() { None } else { Some(next_unit_hint) },
+            next_unit_hint: if next_unit_hint.is_empty() {
+                None
+            } else {
+                Some(next_unit_hint)
+            },
         },
     }
 }

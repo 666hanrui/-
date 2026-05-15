@@ -4,10 +4,12 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::llm::config::RuntimeConfig;
-use crate::llm::server_proxy::{self, ServerLlmParams};
+use crate::llm::server_proxy::{self, PromptLlmParams};
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 fn uuid() -> String {
@@ -63,7 +65,8 @@ pub struct V2Shot {
 }
 
 const COMPULSORY_DECLARATION_DEFAULT: &str = "【强制声明】无背景音乐，仅保留环境音与人声：画面禁字幕/文字/水印/Logo：禁止可读文字：禁止超现实夸张：禁止无反作用力动作";
-const QUALITY_BASELINE_DEFAULT: &str = "【画质底线】高光保结构、暗部不死黑、中间调厚实、主体边缘稳定、介质分层清楚";
+const QUALITY_BASELINE_DEFAULT: &str =
+    "【画质底线】高光保结构、暗部不死黑、中间调厚实、主体边缘稳定、介质分层清楚";
 
 // ── Asset helper ──
 
@@ -157,41 +160,112 @@ fn normalize_v2_shot(raw: &serde_json::Value, scene_index: usize) -> V2Shot {
     V2Shot {
         shot_number: scene_index + 1,
         scene_index,
-        shot_type: raw.get("shotType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        title_bar: raw.get("titleBar").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        mount: raw.get("mount").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        camera: raw.get("camera").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        opening_frame: raw.get("openingFrame").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        closing_frame: raw.get("closingFrame").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        shot_type: raw
+            .get("shotType")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        title_bar: raw
+            .get("titleBar")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        mount: raw
+            .get("mount")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        camera: raw
+            .get("camera")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        opening_frame: raw
+            .get("openingFrame")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        closing_frame: raw
+            .get("closingFrame")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         connection: if scene_index == 0 {
             String::new()
         } else {
-            raw.get("connection").and_then(|v| v.as_str()).unwrap_or("").to_string()
+            raw.get("connection")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
         },
-        transition: raw.get("transition").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        dual_anchor: raw.get("dualAnchor").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        main_prompt: raw.get("mainPrompt").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        transition: raw
+            .get("transition")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        dual_anchor: raw
+            .get("dualAnchor")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        main_prompt: raw
+            .get("mainPrompt")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         compulsory_declaration: raw
             .get("compulsoryDeclaration")
             .and_then(|v| v.as_str())
             .unwrap_or(COMPULSORY_DECLARATION_DEFAULT)
             .to_string(),
-        must_show: raw.get("mustShow").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        quality_route: raw.get("qualityRoute").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        imaging_style: raw.get("imagingStyle").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        must_show: raw
+            .get("mustShow")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        quality_route: raw
+            .get("qualityRoute")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        imaging_style: raw
+            .get("imagingStyle")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         quality_baseline: raw
             .get("qualityBaseline")
             .and_then(|v| v.as_str())
             .unwrap_or(QUALITY_BASELINE_DEFAULT)
             .to_string(),
-        reference: raw.get("reference").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        micro_expressions: raw.get("microExpressions").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        nail_lines: raw.get("nailLines").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        e15: raw.get("e15").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        reference: raw
+            .get("reference")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        micro_expressions: raw
+            .get("microExpressions")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        nail_lines: raw
+            .get("nailLines")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        e15: raw
+            .get("e15")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         asset_refs: raw
             .get("assetRefs")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default(),
     }
 }
@@ -206,7 +280,8 @@ fn build_fallback_v2_shot(scene_index: usize) -> V2Shot {
             scene_index + 1
         ),
         mount: "挂载：@场景：待定".to_string(),
-        camera: "相机位置：中景位；相机朝向：正面；角色朝向：面对镜头；构图锚点：主体居中".to_string(),
+        camera: "相机位置：中景位；相机朝向：正面；角色朝向：面对镜头；构图锚点：主体居中"
+            .to_string(),
         opening_frame: "镜头平稳推入场景".to_string(),
         closing_frame: "主体定格在画面中央".to_string(),
         connection: String::new(),
@@ -228,7 +303,11 @@ fn build_fallback_v2_shot(scene_index: usize) -> V2Shot {
 
 // ── Cross-shot context builder ──
 
-fn build_previous_context(last_shot: &V2Shot, last_script_content: &str, scene_quality: &str) -> serde_json::Value {
+fn build_previous_context(
+    last_shot: &V2Shot,
+    last_script_content: &str,
+    scene_quality: &str,
+) -> serde_json::Value {
     let len = last_script_content.len();
     let tail = if len > 200 {
         &last_script_content[len - 200..]
@@ -246,7 +325,10 @@ fn build_previous_context(last_shot: &V2Shot, last_script_content: &str, scene_q
 
 // ── Outline fallback ──
 
-fn parse_outline_from_json(parsed: &serde_json::Value, _script_body: &str) -> Result<Outline, String> {
+fn parse_outline_from_json(
+    parsed: &serde_json::Value,
+    _script_body: &str,
+) -> Result<Outline, String> {
     let step03 = parsed
         .get("step03")
         .or_else(|| parsed.get("step0_3"))
@@ -391,7 +473,11 @@ fn parse_outline_from_json(parsed: &serde_json::Value, _script_body: &str) -> Re
                     .get("keyBeats")
                     .or_else(|| s.get("beats"))
                     .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect()
+                    })
                     .unwrap_or_default(),
             }
         })
@@ -429,8 +515,10 @@ async fn run_outline_generation(
         "duration": duration,
         "assets": safe_parse_assets(&assets_json),
     });
-    let completion = server_proxy::request_server_llm(ServerLlmParams {
-        runtime_config: RuntimeConfig { ..runtime_config.clone() },
+    let completion = server_proxy::request_prompt_llm(PromptLlmParams {
+        runtime_config: RuntimeConfig {
+            ..runtime_config.clone()
+        },
         prompt_slug: "prompt_segment_planning".into(),
         temperature: Some(0.3),
         user_messages: vec![json!({"role": "user", "content": user_content.to_string()})],
@@ -467,7 +555,7 @@ pub async fn generate_outline(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -477,7 +565,8 @@ pub async fn generate_outline(
 
     let (script_body, duration) = load_script_context(conn, task_id)?;
 
-    let outline = run_outline_generation(conn, task_id, &script_body, &duration, &runtime_config).await?;
+    let outline =
+        run_outline_generation(conn, task_id, &script_body, &duration, &runtime_config).await?;
 
     // Persist to DB
     let outline_json = serde_json::to_string(&outline).unwrap_or_default();
@@ -575,13 +664,7 @@ pub fn get_outline(conn: &Connection, task_id: &str) -> Option<serde_json::Value
 
 // ── Persistence ──
 
-fn persist(
-    conn: &Connection,
-    task_id: &str,
-    seedance_groups: &[V2Shot],
-    model: &str,
-    time: &str,
-) {
+fn persist(conn: &Connection, task_id: &str, seedance_groups: &[V2Shot], model: &str, time: &str) {
     let seedance_json = serde_json::to_string(seedance_groups).unwrap_or_default();
     let existing_plan: Option<String> = conn
         .query_row(
@@ -593,8 +676,11 @@ fn persist(
         .flatten();
     let plan_json = existing_plan.unwrap_or_else(|| "[]".to_string());
 
-    conn.execute("DELETE FROM prompt_output_records WHERE task_id = ?1", params![task_id])
-        .ok();
+    conn.execute(
+        "DELETE FROM prompt_output_records WHERE task_id = ?1",
+        params![task_id],
+    )
+    .ok();
     conn.execute(
         "INSERT INTO prompt_output_records (id, task_id, grid_groups_json, seedance_groups_json, generation_model, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -621,7 +707,7 @@ pub async fn run_prompt_generation(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -630,9 +716,8 @@ pub async fn run_prompt_generation(
     };
 
     let assets_json = build_assets_json(conn, task_id);
-    let outline = get_outline(conn, task_id).ok_or_else(|| {
-        "请先生成并确认分镜大纲，再开始逐镜生成。".to_string()
-    })?;
+    let outline = get_outline(conn, task_id)
+        .ok_or_else(|| "请先生成并确认分镜大纲，再开始逐镜生成。".to_string())?;
 
     let shots = outline["shots"]
         .as_array()
@@ -642,16 +727,12 @@ pub async fn run_prompt_generation(
     let total_shots = outline["totalShots"].as_i64().unwrap_or(shots.len() as i64) as usize;
 
     let mut all_shot_prompts: Vec<V2Shot> = Vec::new();
-    let model = format!("workfisher-prompt-gen-v2 / {}", runtime_config.default_model);
+    let model = format!("local-prompt-gen-v2 / {}", runtime_config.default_model);
 
     let mut previous_context: Option<serde_json::Value> = None;
 
     for (i, shot) in shots.iter().enumerate() {
-        let prev = if i > 0 {
-            shots.get(i - 1)
-        } else {
-            None
-        };
+        let prev = if i > 0 { shots.get(i - 1) } else { None };
         let next = shots.get(i + 1);
 
         let user_content = json!({
@@ -684,8 +765,10 @@ pub async fn run_prompt_generation(
             "previousContext": previous_context,
         });
 
-        let completion = server_proxy::request_server_llm(ServerLlmParams {
-            runtime_config: RuntimeConfig { ..runtime_config.clone() },
+        let completion = server_proxy::request_prompt_llm(PromptLlmParams {
+            runtime_config: RuntimeConfig {
+                ..runtime_config.clone()
+            },
             prompt_slug: "prompt_seedance_scene".into(),
             temperature: Some(0.3),
             user_messages: vec![json!({"role": "user", "content": user_content.to_string()})],
@@ -703,8 +786,13 @@ pub async fn run_prompt_generation(
         all_shot_prompts.push(group.clone());
         previous_context = Some(build_previous_context(
             &group,
-            shot.get("scriptContent").and_then(|v| v.as_str()).unwrap_or(""),
-            outline.get("sceneQuality").and_then(|v| v.as_str()).unwrap_or(""),
+            shot.get("scriptContent")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+            outline
+                .get("sceneQuality")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
         ));
     }
 
@@ -737,7 +825,7 @@ pub async fn run_prompt_group_generation(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -746,9 +834,8 @@ pub async fn run_prompt_group_generation(
     };
 
     let assets_json = build_assets_json(conn, task_id);
-    let outline = get_outline(conn, task_id).ok_or_else(|| {
-        "请先生成并确认分镜大纲。".to_string()
-    })?;
+    let outline =
+        get_outline(conn, task_id).ok_or_else(|| "请先生成并确认分镜大纲。".to_string())?;
 
     let shots = outline["shots"]
         .as_array()
@@ -830,8 +917,10 @@ pub async fn run_prompt_group_generation(
         "originalSeedance": input.get("originalSeedance"),
     });
 
-    let completion = server_proxy::request_server_llm(ServerLlmParams {
-        runtime_config: RuntimeConfig { ..runtime_config.clone() },
+    let completion = server_proxy::request_prompt_llm(PromptLlmParams {
+        runtime_config: RuntimeConfig {
+            ..runtime_config.clone()
+        },
         prompt_slug: "prompt_seedance_scene".into(),
         temperature: Some(0.3),
         user_messages: vec![json!({"role": "user", "content": user_content.to_string()})],
@@ -846,7 +935,7 @@ pub async fn run_prompt_group_generation(
         _ => build_fallback_v2_shot(scene_index),
     };
 
-    let model = format!("workfisher-prompt-gen-v2 / {}", runtime_config.default_model);
+    let model = format!("local-prompt-gen-v2 / {}", runtime_config.default_model);
 
     // Merge into existing persisted data
     let existing_row: Option<String> = conn

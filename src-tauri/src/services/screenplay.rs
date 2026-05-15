@@ -10,7 +10,7 @@ use crate::utils::step_parser;
 
 pub fn skill_status() -> serde_json::Value {
     serde_json::json!({
-        "cached": true, "cacheDir": "(server-managed)", "main": true, "core": true,
+        "cached": true, "cacheDir": "(local-embedded)", "main": true, "core": true,
         "formatUltrashort": true, "formatShort": true, "chinese": true, "craft": true,
         "aiPitfalls": true, "checkpointTemplate": true, "genreHookLibrary": true,
     })
@@ -57,7 +57,10 @@ pub fn finalize_to_script_task(
         if imported_script.trim().is_empty() {
             return Err("Imported script is empty".into());
         }
-        let re = regex_lite::Regex::new(r"【\s*(场景|场)\s*[一二三四五六七八九十百零\d]+\s*[:：][^】]+】\s*[（(][^)）]*[)）]").unwrap();
+        let re = regex_lite::Regex::new(
+            r"【\s*(场景|场)\s*[一二三四五六七八九十百零\d]+\s*[:：][^】]+】\s*[（(][^)）]*[)）]",
+        )
+        .unwrap();
         let matches: Vec<_> = re.find_iter(&imported_script).collect();
 
         if matches.len() >= 2 {
@@ -94,8 +97,8 @@ pub fn finalize_to_script_task(
             })]
         }
     } else {
-        let step7 = screenplay_store::get_active_version(project_id, 7)
-            .ok_or("Step 7 output not found")?;
+        let step7 =
+            screenplay_store::get_active_version(project_id, 7).ok_or("Step 7 output not found")?;
         let structured = step7.structured.ok_or("Step 7 structured data missing")?;
         let scenes = structured["scenes"]
             .as_array()
@@ -104,14 +107,18 @@ pub fn finalize_to_script_task(
         scenes
     };
 
-    let doctor = screenplay_store::get_active_version(project_id, 8)
-        .and_then(|v| v.structured);
+    let doctor = screenplay_store::get_active_version(project_id, 8).and_then(|v| v.structured);
 
     let project_name = rec
         .init
         .name
         .clone()
-        .or_else(|| rec.init.concept.as_ref().map(|c| c.chars().take(30).collect()))
+        .or_else(|| {
+            rec.init
+                .concept
+                .as_ref()
+                .map(|c| c.chars().take(30).collect())
+        })
         .unwrap_or_else(|| "未命名剧本".into());
 
     let result = {
@@ -217,13 +224,19 @@ pub async fn generate_step_async(
 ) -> Result<serde_json::Value, String> {
     let runtime_config = RuntimeConfig {
         api_key: settings["textKey"].as_str().unwrap_or_default().to_string(),
-        api_base_url: settings["textEndpoint"].as_str().unwrap_or_default().to_string(),
+        api_base_url: settings["textEndpoint"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         default_model: settings["textModel"]
             .as_str()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("deepseek-chat")
             .to_string(),
-        text_mode: settings["textMode"].as_str().unwrap_or("openai").to_string(),
+        text_mode: settings["textMode"]
+            .as_str()
+            .unwrap_or("openai")
+            .to_string(),
         mode: String::new(),
         image_endpoint: String::new(),
         image_key: String::new(),
@@ -348,13 +361,19 @@ pub async fn selfcheck_step_async(
 
     let runtime_config = RuntimeConfig {
         api_key: settings["textKey"].as_str().unwrap_or_default().to_string(),
-        api_base_url: settings["textEndpoint"].as_str().unwrap_or_default().to_string(),
+        api_base_url: settings["textEndpoint"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         default_model: settings["textModel"]
             .as_str()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("deepseek-chat")
             .to_string(),
-        text_mode: settings["textMode"].as_str().unwrap_or("openai").to_string(),
+        text_mode: settings["textMode"]
+            .as_str()
+            .unwrap_or("openai")
+            .to_string(),
         mode: String::new(),
         image_endpoint: String::new(),
         image_key: String::new(),
@@ -467,13 +486,19 @@ pub async fn generate_checkpoint_async(
 
     let runtime_config = RuntimeConfig {
         api_key: settings["textKey"].as_str().unwrap_or_default().to_string(),
-        api_base_url: settings["textEndpoint"].as_str().unwrap_or_default().to_string(),
+        api_base_url: settings["textEndpoint"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
         default_model: settings["textModel"]
             .as_str()
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("deepseek-chat")
             .to_string(),
-        text_mode: settings["textMode"].as_str().unwrap_or("openai").to_string(),
+        text_mode: settings["textMode"]
+            .as_str()
+            .unwrap_or("openai")
+            .to_string(),
         mode: String::new(),
         image_endpoint: String::new(),
         image_key: String::new(),
@@ -516,9 +541,8 @@ pub fn get_checkpoint(project_id: &str, trigger: &str) -> Option<String> {
 }
 
 pub fn get_cached_selfcheck(project_id: &str, step_number: u8) -> Option<serde_json::Value> {
-    screenplay_store::get_selfcheck(project_id, step_number).map(|s| {
-        serde_json::json!({ "items": s.items, "createdAt": s.created_at })
-    })
+    screenplay_store::get_selfcheck(project_id, step_number)
+        .map(|s| serde_json::json!({ "items": s.items, "createdAt": s.created_at }))
 }
 
 pub fn approve_step(
@@ -529,10 +553,7 @@ pub fn approve_step(
     screenplay_store::approve_step(project_id, step_number, next_step)
 }
 
-pub fn rollback_to(
-    project_id: &str,
-    target_step: u8,
-) -> screenplay_store::ProjectRecord {
+pub fn rollback_to(project_id: &str, target_step: u8) -> screenplay_store::ProjectRecord {
     screenplay_store::rollback_to(project_id, target_step)
 }
 
@@ -540,11 +561,7 @@ pub fn list_versions(project_id: &str, step_number: u8) -> Vec<screenplay_store:
     screenplay_store::list_versions(project_id, step_number)
 }
 
-pub fn restore_version(
-    project_id: &str,
-    step_number: u8,
-    version_id: &str,
-) {
+pub fn restore_version(project_id: &str, step_number: u8, version_id: &str) {
     screenplay_store::set_active_version(project_id, step_number, version_id);
 }
 

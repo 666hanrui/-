@@ -15,6 +15,9 @@ const SLUG_ASSET_SCENE: &str = include_str!("prompts/slug_asset_scene.txt");
 const SLUG_ASSET_PROP: &str = include_str!("prompts/slug_asset_prop.txt");
 const SLUG_PROMPT_SEGMENT_PLANNING: &str = include_str!("prompts/slug_prompt_segment_planning.txt");
 const SLUG_PROMPT_SEEDANCE_SCENE: &str = include_str!("prompts/slug_prompt_seedance_scene.txt");
+const SLUG_IMAGE_PROMPT_GENERATION: &str = include_str!("prompts/slug_image_prompt_generation.txt");
+const SLUG_VIDEO_PROMPT_GENERATION: &str = include_str!("prompts/slug_video_prompt_generation.txt");
+const SLUG_PROMPT_REVIEW: &str = include_str!("prompts/slug_prompt_review.txt");
 
 // ── ContextType template files ──
 
@@ -52,6 +55,9 @@ pub fn build_prompt_slug(slug: &str, user_messages: &[Value]) -> (String, Vec<Va
         "asset_prop" => SLUG_ASSET_PROP,
         "prompt_segment_planning" => SLUG_PROMPT_SEGMENT_PLANNING,
         "prompt_seedance_scene" => SLUG_PROMPT_SEEDANCE_SCENE,
+        "image_prompt_generation" => SLUG_IMAGE_PROMPT_GENERATION,
+        "video_prompt_generation" => SLUG_VIDEO_PROMPT_GENERATION,
+        "prompt_review" => SLUG_PROMPT_REVIEW,
         _ => "你是一个专业的AI助手。",
     };
     (system.to_string(), user_messages.to_vec())
@@ -202,9 +208,7 @@ fn build_user_message(
         msg.push_str(&format!("## 用户修改要求\n{}\n\n", user_feedback));
     }
 
-    msg.push_str(
-        "请严格按 system 中 \"当前任务\" 的输出格式要求产出，不要输出任何 meta 解释。",
-    );
+    msg.push_str("请严格按 system 中 \"当前任务\" 的输出格式要求产出，不要输出任何 meta 解释。");
 
     msg
 }
@@ -249,11 +253,9 @@ fn build_checkpoint_prompt(params: &Value) -> (String, String) {
         .as_str()
         .filter(|s| !s.is_empty())
         .unwrap_or("");
-    let format_val = init["format"]
-        .as_str()
-        .unwrap_or("");
-    let project_snapshot_str = serde_json::to_string_pretty(&params["projectSnapshot"])
-        .unwrap_or_default();
+    let format_val = init["format"].as_str().unwrap_or("");
+    let project_snapshot_str =
+        serde_json::to_string_pretty(&params["projectSnapshot"]).unwrap_or_default();
 
     let system = CHECKPOINT_TEMPLATE.to_string();
 
@@ -293,7 +295,8 @@ fn build_seedance_unit_efg_prompt(params: &Value) -> (String, String) {
 
     let unit = serde_json::to_string_pretty(&params["unit"]).unwrap_or_default();
     let script_fragment = params["scriptFragment"].as_str().unwrap_or("");
-    let analysis_context = serde_json::to_string_pretty(&params["analysisContext"]).unwrap_or_default();
+    let analysis_context =
+        serde_json::to_string_pretty(&params["analysisContext"]).unwrap_or_default();
     let assets_json = params["assetsJson"].as_str().unwrap_or("{}");
     let unit_index = params["unitIndex"].as_i64().unwrap_or(0);
     let planned_entry_state = params["plannedEntryState"].as_str().unwrap_or("");

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 static PROJECTS_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -31,7 +31,9 @@ fn new_version_id() -> String {
 }
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -255,7 +257,9 @@ pub fn list_recent_projects(limit: usize) -> Vec<serde_json::Value> {
 
 pub fn delete_project_file(project_id: &str) -> bool {
     let file = project_file(project_id);
-    file.exists().then(|| std::fs::remove_file(&file).ok()).is_some()
+    file.exists()
+        .then(|| std::fs::remove_file(&file).ok())
+        .is_some()
 }
 
 pub fn rename_project(project_id: &str, new_name: &str) -> bool {
@@ -373,8 +377,7 @@ pub fn save_selfcheck(project_id: &str, step_number: u8, items: Vec<serde_json::
 }
 
 pub fn get_selfcheck(project_id: &str, step_number: u8) -> Option<SelfcheckData> {
-    load_project(project_id)
-        .and_then(|rec| rec.selfchecks.get(&step_number.to_string()).cloned())
+    load_project(project_id).and_then(|rec| rec.selfchecks.get(&step_number.to_string()).cloned())
 }
 
 pub fn save_checkpoint(project_id: &str, trigger: &str, content: &str) -> bool {
@@ -389,8 +392,7 @@ pub fn save_checkpoint(project_id: &str, trigger: &str, content: &str) -> bool {
 }
 
 pub fn get_checkpoint(project_id: &str, trigger: &str) -> Option<String> {
-    load_project(project_id)
-        .and_then(|rec| rec.checkpoints.get(trigger).cloned())
+    load_project(project_id).and_then(|rec| rec.checkpoints.get(trigger).cloned())
 }
 
 pub fn set_linked_script_task_id(project_id: &str, task_id: &str) {

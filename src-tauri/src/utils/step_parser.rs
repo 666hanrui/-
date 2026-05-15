@@ -162,7 +162,9 @@ pub fn parse_step1(md: &str) -> serde_json::Value {
 
 pub fn parse_step2(md: &str) -> serde_json::Value {
     let blocks = parse_typed_blocks(md);
-    let synopsis = blocks.iter().find(|b| is_type_match(&b.type_str, "SYNOPSIS"));
+    let synopsis = blocks
+        .iter()
+        .find(|b| is_type_match(&b.type_str, "SYNOPSIS"));
 
     let text = synopsis
         .map(|b| {
@@ -227,7 +229,9 @@ pub fn parse_step3(md: &str) -> serde_json::Value {
 
 pub fn parse_step4(md: &str) -> serde_json::Value {
     let blocks = parse_typed_blocks(md);
-    let backstory = blocks.iter().find(|b| is_type_match(&b.type_str, "BACKSTORY"));
+    let backstory = blocks
+        .iter()
+        .find(|b| is_type_match(&b.type_str, "BACKSTORY"));
 
     let f = backstory.map(|b| &b.fields).cloned().unwrap_or_default();
 
@@ -248,7 +252,9 @@ pub fn parse_step5(md: &str) -> serde_json::Value {
         let cn_str = format!("第{}幕", cn[(act_num - 1) as usize]);
         blocks.iter().find(|b| {
             let t = b.type_str.to_uppercase();
-            t == act_str || (t == "ACT" && b.id == act_num.to_string()) || b.type_str.contains(&cn_str)
+            t == act_str
+                || (t == "ACT" && b.id == act_num.to_string())
+                || b.type_str.contains(&cn_str)
         })
     };
 
@@ -345,8 +351,8 @@ pub fn parse_step8(md: &str) -> serde_json::Value {
     let total_score = doctor
         .and_then(|b| parse_int_safe_opt(&get_field(b, &["totalScore", "总分"])))
         .unwrap_or(0);
-    let verdict = get_field_opt(doctor.unwrap_or(&create_empty()), &["verdict", "结论"])
-        .unwrap_or_default();
+    let verdict =
+        get_field_opt(doctor.unwrap_or(&create_empty()), &["verdict", "结论"]).unwrap_or_default();
 
     let issues: Vec<String> = doctor.map(|b| parse_list(&b.body)).unwrap_or_default();
 
@@ -377,8 +383,7 @@ pub fn parse_step8(md: &str) -> serde_json::Value {
         .collect();
 
     let rev_path = blocks.iter().find(|b| {
-        is_type_match(&b.type_str, "REVISION_PATH")
-            || is_type_match(&b.type_str, "REVISIONPATH")
+        is_type_match(&b.type_str, "REVISION_PATH") || is_type_match(&b.type_str, "REVISIONPATH")
     });
     let revision_path = rev_path.map(|b| parse_list(&b.body)).unwrap_or_default();
 

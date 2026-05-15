@@ -21,5 +21,8 @@ Thumbs.db
 # Claude local settings
 .claude/settings.local.json
 
+# Proxy config (contains credentials)
+.npmrc
+
 # Extracted reference app (not source code)
 extracted/

@@ -3,10 +3,12 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::llm::config::RuntimeConfig;
-use crate::llm::server_proxy::{self, ServerLlmParams};
+use crate::llm::server_proxy::{self, PromptLlmParams};
 
 fn now() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+    chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string()
 }
 
 fn uuid() -> String {
@@ -35,7 +37,9 @@ fn extract_json_object(text: &str) -> Option<serde_json::Value> {
 
 fn extract_score_from_text(text: &str) -> Option<i32> {
     let patterns = [
-        regex_lite::Regex::new(r"(?i)(?:Total Score|总分|综合评分)[^\d]{0,10}(\d{1,3})(?:\s*\/\s*100)?"),
+        regex_lite::Regex::new(
+            r"(?i)(?:Total Score|总分|综合评分)[^\d]{0,10}(\d{1,3})(?:\s*\/\s*100)?",
+        ),
         regex_lite::Regex::new(r"(\d{1,3})\s*/\s*100"),
         regex_lite::Regex::new(r"评分[^\d]{0,10}(\d{1,3})"),
     ];
@@ -54,8 +58,12 @@ fn extract_score_from_text(text: &str) -> Option<i32> {
 }
 
 fn extract_status_from_text(text: &str, score: Option<i32>) -> Option<&'static str> {
-    let has_pass = regex_lite::Regex::new(r"(?i)(审核通过|通过|passed)").unwrap().is_match(text);
-    let has_fail = regex_lite::Regex::new(r"(?i)(审核未通过|未通过|failed)").unwrap().is_match(text);
+    let has_pass = regex_lite::Regex::new(r"(?i)(审核通过|通过|passed)")
+        .unwrap()
+        .is_match(text);
+    let has_fail = regex_lite::Regex::new(r"(?i)(审核未通过|未通过|failed)")
+        .unwrap()
+        .is_match(text);
     if has_pass && !has_fail {
         return Some("passed");
     }
@@ -121,69 +129,151 @@ fn build_local_dimension_scores(script_body: &str) -> Vec<ReviewDimension> {
         .find_iter(script_body)
         .count();
     let os_count = script_body.matches("OS").count();
-    let hook_signals = ["重生", "背叛", "羞辱", "系统", "复仇", "反击", "打脸", "女帝", "阎罗", "危机"];
-    let hook_hits = hook_signals.iter().filter(|k| script_body.contains(**k)).count();
-    let conflict_signals = ["压制", "威胁", "羞辱", "挑衅", "逼迫", "翻盘", "反击", "怒斥"];
-    let conflict_hits = conflict_signals.iter().filter(|k| script_body.contains(**k)).count();
+    let hook_signals = [
+        "重生", "背叛", "羞辱", "系统", "复仇", "反击", "打脸", "女帝", "阎罗", "危机",
+    ];
+    let hook_hits = hook_signals
+        .iter()
+        .filter(|k| script_body.contains(**k))
+        .count();
+    let conflict_signals = [
+        "压制", "威胁", "羞辱", "挑衅", "逼迫", "翻盘", "反击", "怒斥",
+    ];
+    let conflict_hits = conflict_signals
+        .iter()
+        .filter(|k| script_body.contains(**k))
+        .count();
 
     let s = |base: i32, inc: i32| clamp_score((base + inc) as f64);
-    let story_progress = s(62, (scene_count as i32 * 5).min(18) + (conflict_hits as i32 * 3).min(10));
-    let character = s(64, (dialogue_count as i32 * 2).min(16) + (os_count as i32 * 2).min(8));
-    let dialogue = s(63, (dialogue_count as i32 * 2).min(18) + if script_body.contains('"') || script_body.contains('"') { 4 } else { 0 });
-    let pace = s(64, (scene_count as i32 * 4).min(16) + if text_len > 1200 { 5 } else { 0 });
-    let readability = s(64, (hook_hits as i32 * 3).min(16) + (conflict_hits as i32 * 3).min(10));
+    let story_progress = s(
+        62,
+        (scene_count as i32 * 5).min(18) + (conflict_hits as i32 * 3).min(10),
+    );
+    let character = s(
+        64,
+        (dialogue_count as i32 * 2).min(16) + (os_count as i32 * 2).min(8),
+    );
+    let dialogue = s(
+        63,
+        (dialogue_count as i32 * 2).min(18)
+            + if script_body.contains('"') || script_body.contains('"') {
+                4
+            } else {
+                0
+            },
+    );
+    let pace = s(
+        64,
+        (scene_count as i32 * 4).min(16) + if text_len > 1200 { 5 } else { 0 },
+    );
+    let readability = s(
+        64,
+        (hook_hits as i32 * 3).min(16) + (conflict_hits as i32 * 3).min(10),
+    );
     let anti_ai = s(70, if text_len > 800 { 5 } else { 0 });
     let format = s(72, (scene_count as i32 * 3).min(10));
 
     vec![
-        ReviewDimension { name: "StoryProgress".into(), score: story_progress, comment: "冲突推进有效，因果链完整。".into() },
-        ReviewDimension { name: "CharacterEmotion".into(), score: character, comment: "角色行为一致，情感通过行为展示。".into() },
-        ReviewDimension { name: "DialogueQuality".into(), score: dialogue, comment: "对白精炼有力，角色区分明显。".into() },
-        ReviewDimension { name: "PaceControl".into(), score: pace, comment: "节奏精准，转场流畅。".into() },
-        ReviewDimension { name: "Readability".into(), score: readability, comment: "钩子强力，爽点铺垫到位。".into() },
-        ReviewDimension { name: "AntiAI".into(), score: anti_ai, comment: "文风自然，几乎无AI痕迹。".into() },
-        ReviewDimension { name: "FormatCompliance".into(), score: format, comment: "格式规范，标记齐全。".into() },
+        ReviewDimension {
+            name: "StoryProgress".into(),
+            score: story_progress,
+            comment: "冲突推进有效，因果链完整。".into(),
+        },
+        ReviewDimension {
+            name: "CharacterEmotion".into(),
+            score: character,
+            comment: "角色行为一致，情感通过行为展示。".into(),
+        },
+        ReviewDimension {
+            name: "DialogueQuality".into(),
+            score: dialogue,
+            comment: "对白精炼有力，角色区分明显。".into(),
+        },
+        ReviewDimension {
+            name: "PaceControl".into(),
+            score: pace,
+            comment: "节奏精准，转场流畅。".into(),
+        },
+        ReviewDimension {
+            name: "Readability".into(),
+            score: readability,
+            comment: "钩子强力，爽点铺垫到位。".into(),
+        },
+        ReviewDimension {
+            name: "AntiAI".into(),
+            score: anti_ai,
+            comment: "文风自然，几乎无AI痕迹。".into(),
+        },
+        ReviewDimension {
+            name: "FormatCompliance".into(),
+            score: format,
+            comment: "格式规范，标记齐全。".into(),
+        },
     ]
 }
 
-fn build_local_review_result(script_body: &str, review_threshold: i32, default_model: &str) -> ReviewResult {
+fn build_local_review_result(
+    script_body: &str,
+    review_threshold: i32,
+    default_model: &str,
+) -> ReviewResult {
     let dimensions = build_local_dimension_scores(script_body);
     let score = compute_weighted_score(&dimensions);
-    let status = if score >= review_threshold { "passed" } else { "failed" };
+    let status = if score >= review_threshold {
+        "passed"
+    } else {
+        "failed"
+    };
 
     let mut sorted = dimensions.clone();
     sorted.sort_by_key(|d| d.score);
     let low_dims: Vec<&ReviewDimension> = sorted.iter().take(3).collect();
 
-    let issues: Vec<String> = low_dims.iter().map(|d| {
-        match d.name.as_str() {
-            "StoryProgress" => "中段推进和冲突抬升还不够集中，场景之间的递进感偏弱。",
-            "CharacterEmotion" => "主角能动性与关键人物关系压制还不够明确，人物戏份还可以更抓人。",
-            "DialogueQuality" => "部分对白还偏说明性，缺少更短更狠的短剧表达。",
-            "PaceControl" => "节奏部分段落偏拖沓，可加快转场节奏。",
-            "Readability" => "钩子和爽点铺垫还不够极致。",
-            "AntiAI" => "部分文风有AI痕迹，需进一步润色。",
-            _ => "高概念辨识度和商业钩子已经有基础，但还不够极致。",
-        }.to_string()
-    }).collect();
+    let issues: Vec<String> = low_dims
+        .iter()
+        .map(|d| {
+            match d.name.as_str() {
+                "StoryProgress" => "中段推进和冲突抬升还不够集中，场景之间的递进感偏弱。",
+                "CharacterEmotion" => {
+                    "主角能动性与关键人物关系压制还不够明确，人物戏份还可以更抓人。"
+                }
+                "DialogueQuality" => "部分对白还偏说明性，缺少更短更狠的短剧表达。",
+                "PaceControl" => "节奏部分段落偏拖沓，可加快转场节奏。",
+                "Readability" => "钩子和爽点铺垫还不够极致。",
+                "AntiAI" => "部分文风有AI痕迹，需进一步润色。",
+                _ => "高概念辨识度和商业钩子已经有基础，但还不够极致。",
+            }
+            .to_string()
+        })
+        .collect();
 
-    let suggestions: Vec<String> = low_dims.iter().map(|d| {
-        match d.name.as_str() {
-            "StoryProgress" => "把中段改成更明显的层层升级，让每场戏都带来新的局势变化。",
-            "CharacterEmotion" => "补强主角此刻最想达成的目标，并让关键配角明确承担压制或试探作用。",
-            "DialogueQuality" => "把解释性台词压缩掉，改成更有攻击性、试探性或反击性的对白。",
-            "PaceControl" => "缩短场景间的铺垫段落，加快关键冲突的到来。",
-            "Readability" => "把第一场的羞辱、背叛或危险写得更具体，让开头商业识别度更强。",
-            "AntiAI" => "增加具体细节和人物独特的表达方式，减少模板化表述。",
-            _ => "强化高概念钩子与商业辨识度。",
-        }.to_string()
-    }).collect();
+    let suggestions: Vec<String> = low_dims
+        .iter()
+        .map(|d| {
+            match d.name.as_str() {
+                "StoryProgress" => "把中段改成更明显的层层升级，让每场戏都带来新的局势变化。",
+                "CharacterEmotion" => {
+                    "补强主角此刻最想达成的目标，并让关键配角明确承担压制或试探作用。"
+                }
+                "DialogueQuality" => "把解释性台词压缩掉，改成更有攻击性、试探性或反击性的对白。",
+                "PaceControl" => "缩短场景间的铺垫段落，加快关键冲突的到来。",
+                "Readability" => "把第一场的羞辱、背叛或危险写得更具体，让开头商业识别度更强。",
+                "AntiAI" => "增加具体细节和人物独特的表达方式，减少模板化表述。",
+                _ => "强化高概念钩子与商业辨识度。",
+            }
+            .to_string()
+        })
+        .collect();
 
-    let priority = vec!["先修结构节奏与关键节点强度。".to_string(), "再修主角目标与人物关系压制。".to_string(), "最后打磨对白锋利度和短剧化表达。".to_string()];
+    let priority = vec![
+        "先修结构节奏与关键节点强度。".to_string(),
+        "再修主角目标与人物关系压制。".to_string(),
+        "最后打磨对白锋利度和短剧化表达。".to_string(),
+    ];
     let summary = if status == "passed" {
-        "当前剧本已达到 CineForge 剧本审查通过线，可进入下游使用，但仍有局部可继续打磨。"
+        "当前剧本已达到 ScriptStack 剧本审查通过线，可进入下游使用，但仍有局部可继续打磨。"
     } else {
-        "当前剧本已有可用基础，但尚未达到 CineForge 90 分通过线，建议先按优先级回退优化。"
+        "当前剧本已有可用基础，但尚未达到 ScriptStack 90 分通过线，建议先按优先级回退优化。"
     };
 
     ReviewResult {
@@ -194,14 +284,24 @@ fn build_local_review_result(script_body: &str, review_threshold: i32, default_m
         suggestions,
         dimensions,
         priority,
-        rewrite_example: if status == "failed" { "优先把第一场写成正在发生的压迫戏，而不是概述背景，再让主角在同场里完成一次明确反应或回击。".to_string() } else { String::new() },
-        review_model: format!("workfisher-review-master-v1 / local-heuristic / {}", default_model),
+        rewrite_example: if status == "failed" {
+            "优先把第一场写成正在发生的压迫戏，而不是概述背景，再让主角在同场里完成一次明确反应或回击。".to_string()
+        } else {
+            String::new()
+        },
+        review_model: format!(
+            "local-review-master-v1 / local-heuristic / {}",
+            default_model
+        ),
         surgery_table: None,
         revision_path: None,
     }
 }
 
-fn normalize_dimensions(input: Option<&[serde_json::Value]>, fallback: &[ReviewDimension]) -> Vec<ReviewDimension> {
+fn normalize_dimensions(
+    input: Option<&[serde_json::Value]>,
+    fallback: &[ReviewDimension],
+) -> Vec<ReviewDimension> {
     let input_dims = match input {
         Some(arr) => arr,
         None => return fallback.to_vec(),
@@ -210,12 +310,15 @@ fn normalize_dimensions(input: Option<&[serde_json::Value]>, fallback: &[ReviewD
         .iter()
         .enumerate()
         .map(|(i, (name, _weight))| {
-            let matched = input_dims.iter().find(|v| {
-                v.get("name")
-                    .and_then(|n| n.as_str())
-                    .map(|n| n.trim().to_lowercase() == name.to_lowercase())
-                    .unwrap_or(false)
-            }).or_else(|| input_dims.get(i));
+            let matched = input_dims
+                .iter()
+                .find(|v| {
+                    v.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|n| n.trim().to_lowercase() == name.to_lowercase())
+                        .unwrap_or(false)
+                })
+                .or_else(|| input_dims.get(i));
             let score = matched
                 .and_then(|v| v.get("score").and_then(|s| s.as_i64()))
                 .map(|s| clamp_score(s as f64))
@@ -241,23 +344,50 @@ fn normalize_review_payload(
 ) -> ReviewResult {
     let fallback = build_local_review_result(script_body, review_threshold, default_model);
     let dimensions = normalize_dimensions(
-        payload.get("dimensions").and_then(|v| v.as_array()).map(|v| v.as_slice()),
+        payload
+            .get("dimensions")
+            .and_then(|v| v.as_array())
+            .map(|v| v.as_slice()),
         &fallback.dimensions,
     );
     let weighted = compute_weighted_score(&dimensions);
-    let score = payload.get("score").and_then(|s| s.as_i64()).map(|s| clamp_score(s as f64)).unwrap_or(weighted);
-    let status = if score >= review_threshold { "passed" } else { "failed" };
+    let score = payload
+        .get("score")
+        .and_then(|s| s.as_i64())
+        .map(|s| clamp_score(s as f64))
+        .unwrap_or(weighted);
+    let status = if score >= review_threshold {
+        "passed"
+    } else {
+        "failed"
+    };
 
-    let surgery_table = payload.get("surgeryTable").and_then(|v| v.as_array()).map(|arr| {
-        arr.iter()
-            .filter(|e| {
-                e.get("original").and_then(|v| v.as_str()).unwrap_or("").len() > 0
-                    || e.get("diagnosis").and_then(|v| v.as_str()).unwrap_or("").len() > 0
-                    || e.get("rewrite").and_then(|v| v.as_str()).unwrap_or("").len() > 0
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    }).filter(|v: &Vec<_>| !v.is_empty());
+    let surgery_table = payload
+        .get("surgeryTable")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|e| {
+                    e.get("original")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .len()
+                        > 0
+                        || e.get("diagnosis")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .len()
+                            > 0
+                        || e.get("rewrite")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .len()
+                            > 0
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .filter(|v: &Vec<_>| !v.is_empty());
 
     ReviewResult {
         score,
@@ -270,20 +400,32 @@ fn normalize_review_payload(
         issues: payload
             .get("problems")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .filter(|v: &Vec<String>| !v.is_empty())
             .unwrap_or(fallback.issues),
         suggestions: payload
             .get("suggestions")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .filter(|v: &Vec<String>| !v.is_empty())
             .unwrap_or(fallback.suggestions),
         dimensions,
         priority: payload
             .get("priority")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .filter(|v: &Vec<String>| !v.is_empty())
             .unwrap_or(fallback.priority),
         rewrite_example: payload
@@ -291,13 +433,13 @@ fn normalize_review_payload(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
-        review_model: format!("workfisher-review-master-v1 / {}", default_model),
+        review_model: format!("local-review-master-v1 / {}", default_model),
         surgery_table,
         revision_path: None,
     }
 }
 
-async fn build_remote_review_result(
+async fn build_model_review_result(
     _task_id: &str,
     script_body: &str,
     input_summary: &str,
@@ -305,9 +447,11 @@ async fn build_remote_review_result(
     mode: &str,
     runtime_config: &RuntimeConfig,
 ) -> Result<ReviewResult, String> {
-    let completion = server_proxy::request_server_llm(ServerLlmParams {
+    let completion = server_proxy::request_prompt_llm(PromptLlmParams {
         prompt_slug: "script_review".into(),
-        runtime_config: RuntimeConfig { ..runtime_config.clone() },
+        runtime_config: RuntimeConfig {
+            ..runtime_config.clone()
+        },
         temperature: Some(0.2),
         user_messages: vec![json!({
             "role": "user",
@@ -323,16 +467,30 @@ async fn build_remote_review_result(
     .await?;
 
     if let Some(json) = extract_json_object(&completion) {
-        return Ok(normalize_review_payload(&json, script_body, runtime_config.review_threshold as i32, &runtime_config.default_model));
+        return Ok(normalize_review_payload(
+            &json,
+            script_body,
+            runtime_config.review_threshold as i32,
+            &runtime_config.default_model,
+        ));
     }
 
-    // Text-based extraction as fallback
+    // Text-based extraction as fallback when the model returns prose instead of JSON.
     let score = extract_score_from_text(&completion)
         .unwrap_or_else(|| compute_weighted_score(&build_local_dimension_scores(script_body)));
-    let status = extract_status_from_text(&completion, Some(score))
-        .unwrap_or(if score >= runtime_config.review_threshold as i32 { "passed" } else { "failed" });
+    let status = extract_status_from_text(&completion, Some(score)).unwrap_or(
+        if score >= runtime_config.review_threshold as i32 {
+            "passed"
+        } else {
+            "failed"
+        },
+    );
 
-    let fallback = build_local_review_result(script_body, runtime_config.review_threshold as i32, &runtime_config.default_model);
+    let fallback = build_local_review_result(
+        script_body,
+        runtime_config.review_threshold as i32,
+        &runtime_config.default_model,
+    );
     Ok(ReviewResult {
         score,
         status: status.to_string(),
@@ -342,13 +500,19 @@ async fn build_remote_review_result(
         dimensions: fallback.dimensions,
         priority: fallback.priority,
         rewrite_example: fallback.rewrite_example,
-        review_model: format!("workfisher-review-master-v1 / text-extraction / {}", runtime_config.default_model),
+        review_model: format!(
+            "local-review-master-v1 / text-extraction / {}",
+            runtime_config.default_model
+        ),
         surgery_table: None,
         revision_path: None,
     })
 }
 
-fn load_script_review_context(conn: &Connection, task_id: &str) -> Result<ScriptReviewContext, String> {
+fn load_script_review_context(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<ScriptReviewContext, String> {
     let row = conn
         .query_row(
             "SELECT st.mode, st.input_summary, st.duration, so.script_body
@@ -370,7 +534,9 @@ fn load_script_review_context(conn: &Connection, task_id: &str) -> Result<Script
         )
         .map_err(|_| "未找到对应的剧本任务，无法执行审查。".to_string())?;
 
-    let script_body = row.3.ok_or("当前任务还没有可审查的剧本文本，请先完成生成。")?;
+    let script_body = row
+        .3
+        .ok_or("当前任务还没有可审查的剧本文本，请先完成生成。")?;
     if script_body.trim().is_empty() {
         return Err("当前任务还没有可审查的剧本文本，请先完成生成。".into());
     }
@@ -418,7 +584,11 @@ fn persist_review_result(
     )
     .ok();
 
-    let task_stage = if result.status == "passed" { "reviewed_passed" } else { "reviewed_failed" };
+    let task_stage = if result.status == "passed" {
+        "reviewed_passed"
+    } else {
+        "reviewed_failed"
+    };
     conn.execute(
         "UPDATE script_tasks SET stage = ?1, updated_at = ?2 WHERE id = ?3",
         params![task_stage, review_time, task_id],
@@ -426,7 +596,7 @@ fn persist_review_result(
     .ok();
 }
 
-/// Main entry: run script review (remote LLM or local heuristic).
+/// Main entry: run script review through the configured model endpoint.
 pub async fn run_script_review(
     conn: &Connection,
     task_id: &str,
@@ -438,7 +608,7 @@ pub async fn run_script_review(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -448,7 +618,7 @@ pub async fn run_script_review(
 
     let ctx = load_script_review_context(conn, task_id)?;
 
-    let result = build_remote_review_result(
+    let result = build_model_review_result(
         task_id,
         &ctx.script_body,
         &ctx.input_summary,

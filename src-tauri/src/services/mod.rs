@@ -1,9 +1,10 @@
+pub mod asset_extraction;
+pub mod duration;
+pub mod prompt_generation;
+pub mod prompt_tasks;
 pub mod screenplay;
 pub mod screenplay_store;
-pub mod duration;
 pub mod script_generation;
 pub mod script_review;
-pub mod asset_extraction;
-pub mod prompt_generation;
 pub mod seedance_service;
 pub mod seedance_store;

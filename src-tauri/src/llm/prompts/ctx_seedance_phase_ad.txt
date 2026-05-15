@@ -733,13 +733,13 @@ Seedance 后端是 LLM，**支持否定句**：
 ## 本次任务
 **只执行 Phase A2-D, 不执行 A1/E/F/G**. 输出 **严格 markdown**, 按下方模板, 不是 JSON, 不加围栏, 无前言后语.
 
-## 重要: Phase A1 (段号编号) 已由服务端完成
+## 重要: Phase A1 (段号编号) 已由本地程序完成
 user message 中的 `paragraphIndex` 数组 **已是预分好的段**, 含 §1, §1.1, §2 等编号 + 原文. 你只需:
 - **不要**重新编号
-- **不要**在输出里重复 text (保留在服务端)
+- **不要**在输出里重复 text (保留在本地程序)
 - 输出的 paragraphIndex 只包含 {id, facts}, 按 user message 里的 id 逐一对应
 
-## ⚠ 场景 unit 分配硬约束 (服务端从剧本标注解析, 不允许偏离)
+## ⚠ 场景 unit 分配硬约束 (本地程序从剧本标注解析, 不允许偏离)
 user message 的 `scenes` 数组定义了每场的 unit 数硬上限. 你必须严格按 `scenes[i].unitCount` 给每场分配 unit:
 - 每场 unit 数 = scenes[i].unitCount, **多 1 个少 1 个都判失败**
 - 每场的 unit 必须只包含该场的 sectionRefs (不能跨场组合)

@@ -1,18 +1,18 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/HEAD/tooling/cli/config.schema.json",
-  "productName": "CineForge",
-  "version": "2.0.5",
-  "identifier": "com.cineforge.desktop",
+  "productName": "ScriptStack",
+  "version": "3.0.0",
+  "identifier": "com.scriptstack.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npx serve -s /Users/torch/Desktop/rerust/dist -l 5173",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npm run frontend:dev",
+    "beforeBuildCommand": "npm run frontend:build"
   },
   "app": {
     "windows": [
       {
-        "title": "创剧 CineForge",
+        "title": "剧本栈 ScriptStack",
         "width": 1440,
         "height": 900,
         "minWidth": 1200,

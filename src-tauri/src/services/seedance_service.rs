@@ -19,8 +19,17 @@ fn chinese_digit_to_number(s: &str) -> Option<usize> {
         return Some(n);
     }
     let map: std::collections::HashMap<char, usize> = [
-        ('零', 0), ('一', 1), ('二', 2), ('三', 3), ('四', 4),
-        ('五', 5), ('六', 6), ('七', 7), ('八', 8), ('九', 9), ('十', 10),
+        ('零', 0),
+        ('一', 1),
+        ('二', 2),
+        ('三', 3),
+        ('四', 4),
+        ('五', 5),
+        ('六', 6),
+        ('七', 7),
+        ('八', 8),
+        ('九', 9),
+        ('十', 10),
     ]
     .iter()
     .copied()
@@ -42,9 +51,11 @@ fn chinese_digit_to_number(s: &str) -> Option<usize> {
 }
 
 fn parse_scene_secs(text: &str) -> Option<usize> {
-    let re = regex_lite::Regex::new(r"[（(]\s*(\d+):(\d+)\s*[-–—~～]\s*(\d+):(\d+)\s*[)）]").unwrap();
+    let re =
+        regex_lite::Regex::new(r"[（(]\s*(\d+):(\d+)\s*[-–—~～]\s*(\d+):(\d+)\s*[)）]").unwrap();
     if let Some(cap) = re.captures(text) {
-        let start = cap[1].parse::<usize>().unwrap_or(0) * 60 + cap[2].parse::<usize>().unwrap_or(0);
+        let start =
+            cap[1].parse::<usize>().unwrap_or(0) * 60 + cap[2].parse::<usize>().unwrap_or(0);
         let end = cap[3].parse::<usize>().unwrap_or(0) * 60 + cap[4].parse::<usize>().unwrap_or(0);
         if end > start {
             return Some(end - start);
@@ -52,7 +63,9 @@ fn parse_scene_secs(text: &str) -> Option<usize> {
     }
     let re = regex_lite::Regex::new(r"[（(]\s*约?\s*(\d+)\s*分\s*(\d+)\s*秒\s*[)）]").unwrap();
     if let Some(cap) = re.captures(text) {
-        return Some(cap[1].parse::<usize>().unwrap_or(0) * 60 + cap[2].parse::<usize>().unwrap_or(0));
+        return Some(
+            cap[1].parse::<usize>().unwrap_or(0) * 60 + cap[2].parse::<usize>().unwrap_or(0),
+        );
     }
     let re = regex_lite::Regex::new(r"[（(]\s*约?\s*(\d+)\s*分钟?\s*[)）]").unwrap();
     if let Some(cap) = re.captures(text) {
@@ -66,8 +79,10 @@ fn parse_scene_secs(text: &str) -> Option<usize> {
 }
 
 fn try_parse_scene_header(line: &str) -> Option<SceneHeader> {
-    let re_bracket =
-        regex_lite::Regex::new(r"^【\s*(场景|场)\s*([一二三四五六七八九十百零\d]+)\s*[:：]\s*(.+?)\s*】").unwrap();
+    let re_bracket = regex_lite::Regex::new(
+        r"^【\s*(场景|场)\s*([一二三四五六七八九十百零\d]+)\s*[:：]\s*(.+?)\s*】",
+    )
+    .unwrap();
     if let Some(cap) = re_bracket.captures(line) {
         let num_str = cap.get(2).unwrap().as_str();
         let _title = cap.get(3).unwrap().as_str().trim().to_string();
@@ -84,8 +99,16 @@ fn try_parse_scene_header(line: &str) -> Option<SceneHeader> {
     )
     .unwrap();
     if let Some(cap) = re_md.captures(line) {
-        let num_str = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str()).unwrap_or("");
-        let _title = cap.get(3).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        let num_str = cap
+            .get(1)
+            .or_else(|| cap.get(2))
+            .map(|m| m.as_str())
+            .unwrap_or("");
+        let _title = cap
+            .get(3)
+            .map(|m| m.as_str().trim())
+            .unwrap_or("")
+            .to_string();
         if let Some(secs) = parse_scene_secs(line) {
             if let Some(scene_num) = chinese_digit_to_number(num_str) {
                 if scene_num > 0 {
@@ -99,8 +122,16 @@ fn try_parse_scene_header(line: &str) -> Option<SceneHeader> {
     )
     .unwrap();
     if let Some(cap) = re_plain.captures(line) {
-        let num_str = cap.get(1).or_else(|| cap.get(2)).map(|m| m.as_str()).unwrap_or("");
-        let _title = cap.get(3).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+        let num_str = cap
+            .get(1)
+            .or_else(|| cap.get(2))
+            .map(|m| m.as_str())
+            .unwrap_or("");
+        let _title = cap
+            .get(3)
+            .map(|m| m.as_str().trim())
+            .unwrap_or("")
+            .to_string();
         if let Some(secs) = parse_scene_secs(line) {
             if let Some(scene_num) = chinese_digit_to_number(num_str) {
                 if scene_num > 0 {
@@ -200,7 +231,8 @@ fn split_script_into_paragraphs(
     for para in &raw_paras {
         let first_line = para.lines().next().unwrap_or("");
         if let Some(header) = try_parse_scene_header(first_line) {
-            let unit_count = std::cmp::max(1, (header.secs as f64 / SECONDS_PER_UNIT).round() as usize);
+            let unit_count =
+                std::cmp::max(1, (header.secs as f64 / SECONDS_PER_UNIT).round() as usize);
             current_scene_id = header.scene_num;
             scenes.push(SceneMeta {
                 scene_id: current_scene_id,
@@ -267,19 +299,28 @@ fn split_script_into_paragraphs(
 
     for (idx, agg) in aggregated.iter().enumerate() {
         let p_idx = idx + 1;
-        let mut push_para =|id: String, text: String, sid: usize, refs_map: &mut std::collections::HashMap<usize, Vec<String>>| {
-            paragraphs.push(v5_parser::ParagraphIndexItem {
-                id: id.clone(),
-                text,
-                facts: None,
-            });
-            if sid > 0 {
-                refs_map.entry(sid).or_default().push(id);
-            }
-        };
+        let mut push_para =
+            |id: String,
+             text: String,
+             sid: usize,
+             refs_map: &mut std::collections::HashMap<usize, Vec<String>>| {
+                paragraphs.push(v5_parser::ParagraphIndexItem {
+                    id: id.clone(),
+                    text,
+                    facts: None,
+                });
+                if sid > 0 {
+                    refs_map.entry(sid).or_default().push(id);
+                }
+            };
 
         if agg.text.len() <= MAX_PARA_LEN * 3 / 2 {
-            push_para(format!("§{}", p_idx), agg.text.clone(), agg.scene_id, &mut scene_refs_map);
+            push_para(
+                format!("§{}", p_idx),
+                agg.text.clone(),
+                agg.scene_id,
+                &mut scene_refs_map,
+            );
         } else {
             let re_sent = regex_lite::Regex::new(r"(?<=[。！？.?!])").unwrap();
             let sentences: Vec<&str> = re_sent
@@ -289,14 +330,24 @@ fn split_script_into_paragraphs(
                 .collect();
 
             if sentences.len() <= 1 {
-                push_para(format!("§{}", p_idx), agg.text.clone(), agg.scene_id, &mut scene_refs_map);
+                push_para(
+                    format!("§{}", p_idx),
+                    agg.text.clone(),
+                    agg.scene_id,
+                    &mut scene_refs_map,
+                );
             } else {
                 let mut sub_buf = String::new();
                 let mut sub_idx = 0;
                 for sent in sentences {
                     if !sub_buf.is_empty() && sub_buf.len() + sent.len() > MAX_PARA_LEN {
                         sub_idx += 1;
-                        push_para(format!("§{}.{}", p_idx, sub_idx), sub_buf.clone(), agg.scene_id, &mut scene_refs_map);
+                        push_para(
+                            format!("§{}.{}", p_idx, sub_idx),
+                            sub_buf.clone(),
+                            agg.scene_id,
+                            &mut scene_refs_map,
+                        );
                         sub_buf = sent.to_string();
                     } else {
                         sub_buf.push_str(sent);
@@ -304,7 +355,12 @@ fn split_script_into_paragraphs(
                 }
                 if !sub_buf.is_empty() {
                     sub_idx += 1;
-                    push_para(format!("§{}.{}", p_idx, sub_idx), sub_buf, agg.scene_id, &mut scene_refs_map);
+                    push_para(
+                        format!("§{}.{}", p_idx, sub_idx),
+                        sub_buf,
+                        agg.scene_id,
+                        &mut scene_refs_map,
+                    );
                 }
             }
         }
@@ -394,7 +450,9 @@ fn repair_json(s: &str) -> String {
     s = s.replace('\u{feff}', "").replace('\u{a0}', " ");
     s = s.replace('\u{201c}', "\"").replace('\u{201d}', "\"");
     s = s.replace('\u{2018}', "'").replace('\u{2019}', "'");
-    s = s.replace(['\u{ff3b}', '\u{3010}'], "[").replace(['\u{ff3d}', '\u{3011}'], "]");
+    s = s
+        .replace(['\u{ff3b}', '\u{3010}'], "[")
+        .replace(['\u{ff3d}', '\u{3011}'], "]");
     s = s.replace('\u{ff5b}', "{").replace('\u{ff5d}', "}");
 
     let mut out = String::with_capacity(s.len());
@@ -410,10 +468,15 @@ fn repair_json(s: &str) -> String {
         }
         if in_str {
             match c {
-                '\\' => { out.push(c); esc = true; }
+                '\\' => {
+                    out.push(c);
+                    esc = true;
+                }
                 '"' => {
                     let mut j = i + 1;
-                    while j < chars.len() && chars[j].is_whitespace() { j += 1; }
+                    while j < chars.len() && chars[j].is_whitespace() {
+                        j += 1;
+                    }
                     let nx = if j < chars.len() { chars[j] } else { '\0' };
                     if nx == '\0' || nx == ',' || nx == ':' || nx == '}' || nx == ']' {
                         out.push('"');
@@ -433,7 +496,10 @@ fn repair_json(s: &str) -> String {
                 '\u{ff0c}' | '\u{3001}' => out.push(','),
                 '\u{ff1a}' => out.push(':'),
                 '\u{ff1b}' => out.push(';'),
-                '"' => { in_str = true; out.push(c); }
+                '"' => {
+                    in_str = true;
+                    out.push(c);
+                }
                 _ => out.push(c),
             }
         }
@@ -489,17 +555,14 @@ fn extract_script_fragment(
 // Phase A-D · Analysis
 // ═══════════════════════════════════════════════════════════════
 
-pub async fn run_phase_ad(
-    conn: &Connection,
-    task_id: &str,
-) -> Result<V5Analysis, String> {
+pub async fn run_phase_ad(conn: &Connection, task_id: &str) -> Result<V5Analysis, String> {
     let settings = crate::db::crud::get_app_settings(conn);
     let runtime_config = RuntimeConfig {
         api_key: settings.text_key,
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -512,7 +575,8 @@ pub async fn run_phase_ad(
     let assets_json = load_assets_json(conn, task_id);
 
     let mut working_script = script_body.clone();
-    let (mut paragraphs, mut scenes, mut total_units) = split_script_into_paragraphs(&working_script);
+    let (mut paragraphs, mut scenes, mut total_units) =
+        split_script_into_paragraphs(&working_script);
 
     if scenes.is_empty() {
         let total_sec = parse_init_duration_to_sec(&duration);
@@ -533,7 +597,9 @@ pub async fn run_phase_ad(
 
     let full_text = server_proxy::request_contextual_llm_stream(
         ContextualLlmParams {
-            runtime_config: RuntimeConfig { ..runtime_config.clone() },
+            runtime_config: RuntimeConfig {
+                ..runtime_config.clone()
+            },
             context_type: "seedance_phase_ad".into(),
             context_params,
             temperature: Some(0.3),
@@ -553,7 +619,10 @@ pub async fn run_phase_ad(
             scenes.len(),
             total_units,
             if paragraphs.is_empty() {
-                format!("⚠ 切段为空! 检查剧本格式是否含场景头标注\n剧本前200字:\n{}", &script_body[..script_body.len().min(200)])
+                format!(
+                    "⚠ 切段为空! 检查剧本格式是否含场景头标注\n剧本前200字:\n{}",
+                    &script_body[..script_body.len().min(200)]
+                )
             } else {
                 "切段正常但 LLM 返回 0 UNIT blocks".to_string()
             }
@@ -598,7 +667,7 @@ pub async fn run_unit_generation(
         api_base_url: settings.text_endpoint,
         default_model: settings.text_model,
         text_mode: settings.text_mode,
-        mode: "remote-configured".into(),
+        mode: "local-configured".into(),
         image_endpoint: String::new(),
         image_key: String::new(),
         image_model: String::new(),
@@ -614,7 +683,13 @@ pub async fn run_unit_generation(
         .iter()
         .find(|u| u.index == unit_index)
         .cloned()
-        .ok_or_else(|| format!("单元 #{} 不存在 (分析里只有 {} 个单元).", unit_index, analysis.units.len()))?;
+        .ok_or_else(|| {
+            format!(
+                "单元 #{} 不存在 (分析里只有 {} 个单元).",
+                unit_index,
+                analysis.units.len()
+            )
+        })?;
 
     let plan_entry = unit.planned_entry_state.clone();
     let previous_unit_plan = if unit_index > 1 {
@@ -626,7 +701,8 @@ pub async fn run_unit_generation(
         .map(|u| u.planned_exit_state.clone())
         .unwrap_or_default();
 
-    let existing_record = crate::services::seedance_store::get_unit(conn, task_id, unit_index as i32);
+    let existing_record =
+        crate::services::seedance_store::get_unit(conn, task_id, unit_index as i32);
     let retry_count = existing_record
         .and_then(|r| r["retryCount"].as_i64())
         .unwrap_or(0) as i32;
@@ -645,9 +721,8 @@ pub async fn run_unit_generation(
         None,
     );
 
-    let (paragraphs, _, _) = split_script_into_paragraphs(
-        &load_script_body(conn, task_id).unwrap_or_default(),
-    );
+    let (paragraphs, _, _) =
+        split_script_into_paragraphs(&load_script_body(conn, task_id).unwrap_or_default());
 
     let script_fragment = extract_script_fragment(&paragraphs, &unit);
     let assets_json = load_assets_json(conn, task_id);
@@ -673,7 +748,9 @@ pub async fn run_unit_generation(
 
     let full_text = match server_proxy::request_contextual_llm_stream(
         ContextualLlmParams {
-            runtime_config: RuntimeConfig { ..runtime_config.clone() },
+            runtime_config: RuntimeConfig {
+                ..runtime_config.clone()
+            },
             context_type: "seedance_unit_efg".into(),
             context_params,
             temperature: Some(0.3),
@@ -725,7 +802,11 @@ pub async fn run_unit_generation(
     let note_area = dual_region.note_area;
 
     if copy_area.len() < 200 {
-        let preview = if full_text.len() > 500 { &full_text[..500] } else { &full_text };
+        let preview = if full_text.len() > 500 {
+            &full_text[..500]
+        } else {
+            &full_text
+        };
         let msg = format!(
             "LLM 产出异常: COPY 区字数 {} < 200. 原始前 500 字:\n{}",
             copy_area.len(),
@@ -806,6 +887,10 @@ pub fn list_all_units(conn: &Connection, task_id: &str) -> Vec<serde_json::Value
     crate::services::seedance_store::list_units(conn, task_id)
 }
 
-pub fn get_unit_record(conn: &Connection, task_id: &str, unit_index: i32) -> Option<serde_json::Value> {
+pub fn get_unit_record(
+    conn: &Connection,
+    task_id: &str,
+    unit_index: i32,
+) -> Option<serde_json::Value> {
     crate::services::seedance_store::get_unit(conn, task_id, unit_index)
 }
