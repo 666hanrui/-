@@ -11,6 +11,8 @@ import {
   ArrowRight,
   Loader2,
   CheckCircle2,
+  ShieldCheck,
+  ClipboardCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -21,6 +23,14 @@ interface StepEngineProps {
   project?: ProjectRecord | null;
   onProjectChanged?: (project?: ProjectRecord | null) => void;
   onNext: () => void;
+}
+
+function normalizeSelfcheck(payload: any) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.selfcheck)) return payload.selfcheck;
+  return [payload];
 }
 
 export default function StepEngine({
@@ -36,8 +46,12 @@ export default function StepEngine({
 
   const [content, setContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSelfchecking, setIsSelfchecking] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [isCheckpointing, setIsCheckpointing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [selfcheckItems, setSelfcheckItems] = useState<any[]>([]);
+  const [checkpoint, setCheckpoint] = useState("");
   const [error, setError] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -46,16 +60,66 @@ export default function StepEngine({
   useEffect(() => {
     setContent(activeVersion?.output || activeVersion?.text || "");
     setIsEditing(false);
+    setSelfcheckItems([]);
+    setCheckpoint("");
     setError("");
   }, [activeVersion?.id, stepConfig.id]);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    let cancelled = false;
+    const loadCachedQualityData = async () => {
+      try {
+        const cached = await invoke<any>(
+          "workflow/selfcheck-cached",
+          { projectId: currentProjectId, stepNumber: stepConfig.id },
+          { silent: true }
+        ).catch(() => null);
+        if (!cancelled) setSelfcheckItems(normalizeSelfcheck(cached));
+
+        if (stepConfig.id === 6 || stepConfig.id === 7 || stepConfig.id === 8) {
+          const ckpt = await invoke<string | null>(
+            "workflow/get-checkpoint",
+            { projectId: currentProjectId, trigger: "after-step-6" },
+            { silent: true }
+          ).catch(() => null);
+          if (!cancelled) setCheckpoint(ckpt || "");
+        }
+      } catch {
+        // Cached quality data is optional; do not block the editor.
+      }
+    };
+    loadCachedQualityData();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentProjectId, stepConfig.id, invoke]);
 
   useEffect(() => {
     if (isGenerating)
       contentEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [content, isGenerating]);
 
+  const ensureCheckpointForLaterSteps = async () => {
+    if (!currentProjectId || !(stepConfig.id === 7 || stepConfig.id === 8)) return true;
+    if (checkpoint.trim()) return true;
+    const existing = await invoke<string | null>(
+      "workflow/get-checkpoint",
+      { projectId: currentProjectId, trigger: "after-step-6" },
+      { silent: true }
+    ).catch(() => null);
+    if (existing) {
+      setCheckpoint(existing);
+      return true;
+    }
+    setError("Step 7/8 生成前需要 after-step-6 checkpoint。请先回到 Step 6 批准并生成 checkpoint。");
+    return false;
+  };
+
   const handleIgnite = async () => {
     if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
+    const checkpointReady = await ensureCheckpointForLaterSteps();
+    if (!checkpointReady) return;
     setIsGenerating(true);
     setContent("");
     setError("");
@@ -97,6 +161,43 @@ export default function StepEngine({
     }
   };
 
+  const handleSelfcheck = async () => {
+    if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
+    if (!content.trim()) return;
+    setIsSelfchecking(true);
+    setError("");
+    try {
+      const result = await invoke<any>(
+        "workflow/selfcheck",
+        { projectId: currentProjectId, stepNumber: stepConfig.id },
+        { timeout: 300000 }
+      );
+      setSelfcheckItems(normalizeSelfcheck(result));
+      onProjectChanged?.();
+    } catch (err: any) {
+      setError(err.message || "自检失败");
+    } finally {
+      setIsSelfchecking(false);
+    }
+  };
+
+  const regenerateCheckpoint = async () => {
+    if (!currentProjectId) return "";
+    setIsCheckpointing(true);
+    try {
+      const next = await invoke<string>(
+        "workflow/regenerate-checkpoint",
+        { projectId: currentProjectId, trigger: "after-step-6" },
+        { timeout: 300000 }
+      );
+      setCheckpoint(next || "");
+      onProjectChanged?.();
+      return next || "";
+    } finally {
+      setIsCheckpointing(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
     if (!content.trim()) return;
@@ -113,6 +214,9 @@ export default function StepEngine({
         },
         { timeout: 120000 }
       );
+      if (stepConfig.id === 6) {
+        await regenerateCheckpoint();
+      }
       onProjectChanged?.(nextProject);
       if (!isLastStep) onNext();
     } catch (err: any) {
@@ -124,12 +228,14 @@ export default function StepEngine({
 
   const doneSteps = project?.doneSteps || project?.done_steps || [];
   const isApproved = doneSteps.includes(stepConfig.id);
+  const canGenerate = !(isGenerating || isApproving || isSelfchecking || isCheckpointing);
+  const canApprove = Boolean(content.trim()) && canGenerate;
 
   return (
     <div className="w-full h-full flex flex-col bg-[#080808]/80 backdrop-blur-2xl rounded-[2rem] border border-white/[0.08] shadow-[0_30px_60px_rgba(0,0,0,0.6)] relative overflow-hidden group">
       <div
         className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-32 blur-[100px] transition-all duration-1000 pointer-events-none ${
-          isGenerating
+          isGenerating || isSelfchecking || isCheckpointing
             ? "bg-indigo-600/30 animate-pulse"
             : "bg-indigo-900/10"
         }`}
@@ -149,7 +255,7 @@ export default function StepEngine({
         <div className="flex gap-3">
           <button
             onClick={handleIgnite}
-            disabled={isGenerating || isApproving}
+            disabled={!canGenerate}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all duration-300 disabled:opacity-50 active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
           >
             {isGenerating ? (
@@ -159,11 +265,15 @@ export default function StepEngine({
             ) : (
               <Play size={16} className="fill-white" />
             )}
-            {isGenerating
-              ? "流式解算中..."
-              : content
-              ? "重新推演"
-              : "生成"}
+            {isGenerating ? "流式解算中..." : content ? "重新生成" : "生成"}
+          </button>
+          <button
+            onClick={handleSelfcheck}
+            disabled={!content.trim() || !canGenerate}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-900/30 border border-cyan-500/30 text-cyan-100 font-bold text-sm transition-all duration-300 disabled:opacity-40 hover:bg-cyan-900/50"
+          >
+            {isSelfchecking ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
+            自检
           </button>
           <AnimatePresence>
             {content && !isGenerating && (
@@ -189,6 +299,24 @@ export default function StepEngine({
         {error && (
           <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-100">
             {error}
+          </div>
+        )}
+        {checkpoint && stepConfig.id >= 6 && (
+          <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-100">
+            <div className="flex items-center gap-2 font-bold mb-2"><ClipboardCheck size={16} /> after-step-6 checkpoint 已存在</div>
+            <div className="line-clamp-3 text-emerald-100/70">{checkpoint}</div>
+          </div>
+        )}
+        {selfcheckItems.length > 0 && (
+          <div className="mb-4 rounded-2xl border border-cyan-500/20 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100">
+            <div className="flex items-center gap-2 font-bold mb-3"><ShieldCheck size={16} /> 自检结果</div>
+            <div className="space-y-2">
+              {selfcheckItems.map((item, index) => (
+                <div key={index} className="rounded-xl bg-black/25 border border-white/5 p-3 text-cyan-100/80 whitespace-pre-wrap">
+                  {typeof item === "string" ? item : JSON.stringify(item, null, 2)}
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {!content && !isGenerating ? (
@@ -224,7 +352,7 @@ export default function StepEngine({
         <div className="text-white/30 text-xs font-mono flex items-center gap-2">
           <div
             className={`w-2 h-2 rounded-full ${
-              isGenerating
+              isGenerating || isSelfchecking || isCheckpointing
                 ? "bg-yellow-400 animate-ping"
                 : content
                 ? isApproved
@@ -235,6 +363,10 @@ export default function StepEngine({
           />
           {isGenerating
             ? "STREAMING DATA..."
+            : isSelfchecking
+            ? "SELF CHECKING..."
+            : isCheckpointing
+            ? "CHECKPOINTING..."
             : isApproved
             ? "STEP APPROVED"
             : content
@@ -243,10 +375,10 @@ export default function StepEngine({
         </div>
         <button
           onClick={handleApprove}
-          disabled={!content || isGenerating || isApproving}
+          disabled={!canApprove}
           className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm transition-all duration-300 disabled:opacity-20 disabled:scale-100 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group"
         >
-          {isApproving ? <Loader2 size={16} className="animate-spin" /> : null}
+          {isApproving || isCheckpointing ? <Loader2 size={16} className="animate-spin" /> : null}
           {isLastStep ? "批准并进入资产锻造" : "批准本步并进入下一步"}
           <ArrowRight
             size={16}
