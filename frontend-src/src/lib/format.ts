@@ -13,8 +13,38 @@ export function getActiveVersion(project: ProjectRecord | null | undefined, step
   return bucket.versions.find((v) => v.isActive || v.is_active) || bucket.versions[bucket.versions.length - 1];
 }
 
+export function getTaskId(task: ScriptTask | null | undefined) {
+  return task?.taskId || task?.task_id || task?.task?.taskId || task?.task?.task_id || "";
+}
+
+export function getProjectId(task: ScriptTask | null | undefined) {
+  return task?.projectId || task?.project_id || task?.task?.projectId || task?.task?.project_id || "";
+}
+
+export function getProjectName(task: ScriptTask | null | undefined) {
+  return task?.projectName || task?.project_name || task?.name || task?.task?.projectName || task?.task?.project_name || task?.task?.name || getTaskId(task);
+}
+
+export function getUpdatedAt(task: ScriptTask | null | undefined) {
+  return task?.updatedAt || task?.updated_at || task?.createdAt || task?.created_at || task?.task?.updatedAt || task?.task?.updated_at || task?.task?.createdAt || task?.task?.created_at;
+}
+
 export function getScriptText(task: ScriptTask | null | undefined) {
-  return task?.scriptBody || task?.script_body || task?.body || task?.text || task?.output || "";
+  if (!task) return "";
+
+  const direct = task.scriptBody || task.script_body || task.plotOutline || task.plot_outline || task.body || task.text || task.output;
+  if (direct) return direct;
+
+  const nestedDirect = task.task ? getScriptText(task.task) : "";
+  if (nestedDirect) return nestedDirect;
+
+  const outputs = Array.isArray(task.outputs) ? task.outputs : [];
+  for (const output of outputs) {
+    const text = output.scriptBody || output.script_body || output.plotOutline || output.plot_outline || output.storyboardBase || output.storyboard_base || output.hookOpening || output.hook_opening;
+    if (text && text.trim()) return text;
+  }
+
+  return "";
 }
 
 export function promptSections(result: PromptResult | null | undefined) {
@@ -40,10 +70,13 @@ export function normalizeAssets(rowsOrPayload: any): AssetBundle {
   }
   const result: AssetBundle = { characters: [], scenes: [], props: [] };
   for (const row of rowsOrPayload || []) {
-    const data = typeof row.assetDataJson === "string" ? readInlineJson(row.assetDataJson) : row.assetData || row;
-    if (row.assetType === "character") result.characters.push(data);
-    if (row.assetType === "scene") result.scenes.push(data);
-    if (row.assetType === "prop") result.props.push(data);
+    const data = typeof row.assetDataJson === "string" || typeof row.asset_data_json === "string"
+      ? readInlineJson(row.assetDataJson || row.asset_data_json)
+      : row.assetData || row.asset_data || row;
+    const type = row.assetType || row.asset_type;
+    if (type === "character" || type === "role") result.characters.push(data);
+    if (type === "scene") result.scenes.push(data);
+    if (type === "prop") result.props.push(data);
   }
   return result;
 }
