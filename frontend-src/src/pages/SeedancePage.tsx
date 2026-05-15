@@ -2,13 +2,14 @@ import { Clapperboard, Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import ScriptSelector from "../components/ScriptSelector";
 import { useTudouBridge } from "../hooks/useTudouBridge";
+import { getTaskId } from "../lib/format";
 import { useAppStore } from "../store/useAppStore";
 import type { ScriptTask } from "../types/tudou";
 
 export default function SeedancePage() {
   const { invoke } = useTudouBridge();
-  const selectedScriptTaskId = useAppStore((state) => state.selectedScriptTaskId);
-  const setSelectedScriptTaskId = useAppStore((state) => state.setSelectedScriptTaskId);
+  const currentTaskId = useAppStore((state) => state.currentTaskId);
+  const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
   const setRealm = useAppStore((state) => state.setRealm);
   const showToast = useAppStore((state) => state.showToast);
 
@@ -26,9 +27,9 @@ export default function SeedancePage() {
   const loadUnits = async (taskId: string) => {
     setBusy("load");
     try {
-      const rows = await invoke<any[]>("seedance.listUnits", [{ taskId }], { silent: true });
+      const rows = await invoke<any[]>("seedance/list-units", { taskId }, { silent: true });
       setUnits(Array.isArray(rows) ? rows : []);
-      const cached = await invoke<any>("seedance.getAnalysis", [{ taskId }], { silent: true }).catch(() => null);
+      const cached = await invoke<any>("seedance/get-analysis", { taskId }, { silent: true }).catch(() => null);
       setAnalysis(cached);
     } catch (err: any) {
       setError(err.message || "读取 Seedance 单元失败");
@@ -38,20 +39,24 @@ export default function SeedancePage() {
   };
 
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
+    const taskId = getTaskId(nextTask);
     setTask(nextTask);
     setScriptText(text);
-    setSelectedScriptTaskId(nextTask.taskId);
-    loadUnits(nextTask.taskId);
+    if (taskId) {
+      setCurrentTaskId(taskId);
+      loadUnits(taskId);
+    }
   };
 
   const runAnalysis = async () => {
-    if (!task?.taskId) return;
+    const taskId = task ? getTaskId(task) : currentTaskId || "";
+    if (!taskId) return;
     setBusy("analysis");
     setError("");
     try {
-      const result = await invoke<any>("seedance.runPhaseAD", [{ taskId: task.taskId }], { timeout: 900_000 });
+      const result = await invoke<any>("seedance/phase-ad", { taskId }, { timeout: 900_000 });
       setAnalysis(result);
-      await loadUnits(task.taskId);
+      await loadUnits(taskId);
       showToast("Seedance A-D 分析完成");
     } catch (err: any) {
       setError(err.message || "Seedance 分析失败");
@@ -61,11 +66,12 @@ export default function SeedancePage() {
   };
 
   const runUnit = async (unitIndex: number) => {
-    if (!task?.taskId) return;
+    const taskId = task ? getTaskId(task) : currentTaskId || "";
+    if (!taskId) return;
     setBusy("unit");
     try {
-      await invoke<any>("seedance.runUnit", [{ taskId: task.taskId, unitIndex }], { timeout: 900_000 });
-      await loadUnits(task.taskId);
+      await invoke<any>("seedance/run-unit", { taskId, unitIndex }, { timeout: 900_000 });
+      await loadUnits(taskId);
       showToast(`镜头单元 ${unitIndex + 1} 已生成`);
     } catch (err: any) {
       setError(err.message || "单元生成失败");
@@ -75,11 +81,12 @@ export default function SeedancePage() {
   };
 
   const runAll = async () => {
-    if (!task?.taskId) return;
+    const taskId = task ? getTaskId(task) : currentTaskId || "";
+    if (!taskId) return;
     setBusy("all");
     try {
-      await invoke<any>("seedance.runAll", [{ taskId: task.taskId }], { timeout: 1_800_000 });
-      await loadUnits(task.taskId);
+      await invoke<any>("seedance/run-all", { taskId }, { timeout: 1_800_000 });
+      await loadUnits(taskId);
       showToast("全部镜头单元已生成");
     } catch (err: any) {
       setError(err.message || "批量生成失败");
@@ -91,7 +98,7 @@ export default function SeedancePage() {
   return (
     <div className="split">
       <aside className="side-panel">
-        <ScriptSelector selectedTaskId={selectedScriptTaskId} onSelect={onSelectScript} />
+        <ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} />
         <div className="card">
           <p className="eyebrow">Script Preview</p>
           <div className="script-preview scroll">{scriptText || "请选择一个剧本任务。"}</div>
@@ -107,17 +114,18 @@ export default function SeedancePage() {
             </h2>
           </div>
           <div className="top-actions">
-            <button className="btn primary" onClick={runAnalysis} disabled={!task || busy === "analysis"}>
+            <button className="btn primary" onClick={runAnalysis} disabled={!(task || currentTaskId) || busy === "analysis"}>
               {busy === "analysis" ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
               运行 A-D 分析
             </button>
-            <button className="btn cyan" onClick={runAll} disabled={!task || units.length === 0 || busy === "all"}>
+            <button className="btn cyan" onClick={runAll} disabled={!(task || currentTaskId) || units.length === 0 || busy === "all"}>
               {busy === "all" ? <Loader2 size={16} className="spin" /> : <Play size={16} />}
               全部生成
             </button>
           </div>
         </div>
 
+        {!(task || currentTaskId) && <div className="notice warn">请选择剧本/项目。没有剧本时不会黑屏。</div>}
         {error && <div className="error">{error}</div>}
 
         <div className="grid two">
@@ -130,18 +138,21 @@ export default function SeedancePage() {
             <div className="table-list">
               {busy === "load" && <div className="notice"><Loader2 size={14} className="spin" /> 正在读取...</div>}
               {units.length === 0 && <div className="empty">完成 A-D 分析后会出现镜头单元。</div>}
-              {units.map((unit, index) => (
-                <div className="row-card" key={unit.id || unit.unitIndex || index}>
-                  <span>
-                    <span className="row-title">Unit {Number(unit.unitIndex ?? index) + 1}</span>
-                    <span className="row-meta">{unit.status || unit.stage || "pending"}</span>
-                  </span>
-                  <button className="btn" onClick={() => runUnit(Number(unit.unitIndex ?? index))} disabled={busy === "unit"}>
-                    {busy === "unit" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-                    生成
-                  </button>
-                </div>
-              ))}
+              {units.map((unit, index) => {
+                const unitIndex = Number(unit.unitIndex ?? index);
+                return (
+                  <div className="row-card" key={unit.id || unitIndex}>
+                    <span>
+                      <span className="row-title">Unit {unitIndex + 1}</span>
+                      <span className="row-meta">{unit.status || unit.stage || "pending"}</span>
+                    </span>
+                    <button className="btn" onClick={() => runUnit(unitIndex)} disabled={busy === "unit"}>
+                      {busy === "unit" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+                      生成
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>
