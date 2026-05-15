@@ -8,7 +8,13 @@ import {
   Library,
   Settings,
   Command,
+  Image as ImageIcon,
+  Film,
+  Clapperboard,
+  FolderKanban,
 } from "lucide-react";
+import { NAV_ITEMS } from "../constants";
+import type { PageId } from "../types/tudou";
 
 import bgCloudcity from "../../assets/home-bg-cloudcity-D5U4Xepb.jpg";
 import bgValley from "../../assets/home-bg-valley-B7cqOehM.jpg";
@@ -20,11 +26,33 @@ const bgMap = {
   samurai: bgSamurai,
 };
 
+const pathByPage: Record<PageId, string> = {
+  hub: "/",
+  workflow: "/workflow",
+  assets: "/assets",
+  image: "/image",
+  video: "/video",
+  seedance: "/seedance",
+  projects: "/projects",
+  settings: "/settings",
+};
+
+const iconByPage: Record<PageId, React.ReactNode> = {
+  hub: <Sparkles size={20} />,
+  workflow: <RouteIcon size={20} />,
+  assets: <Library size={20} />,
+  image: <ImageIcon size={20} />,
+  video: <Film size={20} />,
+  seedance: <Clapperboard size={20} />,
+  projects: <FolderKanban size={20} />,
+  settings: <Settings size={20} />,
+};
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.1, delayChildren: 0.2 },
+    transition: { staggerChildren: 0.06, delayChildren: 0.1 },
   },
 };
 
@@ -96,22 +124,27 @@ export default function MainLayout() {
 
         <motion.div
           variants={itemVariants}
-          className="mb-10 w-12 h-12 rounded-[18px] bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
+          className="mb-8 w-12 h-12 rounded-[18px] bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
         >
           <Command className="text-white" size={20} />
         </motion.div>
 
-        <nav className="flex flex-col gap-3 relative z-10 w-full px-4">
-          <NavItem icon={<Sparkles size={20} />} path="/" currentPath={location.pathname} tooltip="枢纽" variants={itemVariants} />
-          <NavItem icon={<RouteIcon size={20} />} path="/workflow" currentPath={location.pathname} tooltip="山谷" variants={itemVariants} />
-          <NavItem icon={<Library size={20} />} path="/assets" currentPath={location.pathname} tooltip="锻造" variants={itemVariants} />
-          <motion.div variants={itemVariants} className="w-8 h-[1px] bg-white/[0.08] my-3 mx-auto" />
-          <NavItem icon={<Settings size={20} />} path="/settings" currentPath={location.pathname} tooltip="系统" variants={itemVariants} />
+        <nav className="flex flex-col gap-2 relative z-10 w-full px-4 overflow-y-auto custom-scrollbar">
+          {NAV_ITEMS.map((item) => (
+            <NavItem
+              key={item.id}
+              icon={iconByPage[item.id]}
+              path={pathByPage[item.id]}
+              currentPath={location.pathname}
+              tooltip={item.label}
+              variants={itemVariants}
+            />
+          ))}
         </nav>
 
         <motion.div
           variants={itemVariants}
-          className="mt-auto relative group cursor-pointer"
+          className="mt-auto relative group cursor-pointer pt-4"
         >
           <div className="absolute inset-0 bg-indigo-500 rounded-full blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-500" />
           <div className="relative w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md transition-transform duration-300 hover:scale-105">
@@ -142,7 +175,7 @@ export default function MainLayout() {
               </div>
             </div>
           </header>
-          <div className="flex-1 w-full h-full relative z-10 pt-16">
+          <div className="flex-1 w-full h-full relative z-10 pt-16 overflow-hidden">
             <Outlet />
           </div>
         </motion.div>
@@ -177,7 +210,7 @@ function NavItem({ icon, path, currentPath, tooltip, variants }: any) {
       >
         {icon}
       </button>
-      <div className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#111] border border-white/10 text-white/90 text-xs tracking-widest rounded-lg opacity-0 translate-x-[-8px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 shadow-2xl z-50">
+      <div className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#111] border border-white/10 text-white/90 text-xs tracking-widest rounded-lg opacity-0 translate-x-[-8px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 shadow-2xl z-50 whitespace-nowrap">
         {tooltip}
       </div>
     </motion.div>
