@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   ShieldCheck,
   ClipboardCheck,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -33,6 +35,22 @@ function normalizeSelfcheck(payload: any) {
   return [payload];
 }
 
+function getVersionId(version: StepVersion | any) {
+  return version?.id || version?.versionId || version?.version_id || "";
+}
+
+function getVersionText(version: StepVersion | any) {
+  return version?.output || version?.text || "";
+}
+
+function getVersionCreatedAt(version: StepVersion | any) {
+  return version?.createdAt || version?.created_at || "";
+}
+
+function getVersionNumber(version: StepVersion | any, index: number) {
+  return version?.versionNumber || version?.version_number || index + 1;
+}
+
 export default function StepEngine({
   stepConfig,
   isLastStep,
@@ -50,6 +68,10 @@ export default function StepEngine({
   const [isApproving, setIsApproving] = useState(false);
   const [isCheckpointing, setIsCheckpointing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [restoringVersionId, setRestoringVersionId] = useState("");
+  const [versions, setVersions] = useState<StepVersion[]>([]);
   const [selfcheckItems, setSelfcheckItems] = useState<any[]>([]);
   const [checkpoint, setCheckpoint] = useState("");
   const [error, setError] = useState("");
@@ -58,10 +80,12 @@ export default function StepEngine({
   const contentEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setContent(activeVersion?.output || activeVersion?.text || "");
+    setContent(getVersionText(activeVersion));
     setIsEditing(false);
     setSelfcheckItems([]);
     setCheckpoint("");
+    setVersions([]);
+    setShowVersions(false);
     setError("");
   }, [activeVersion?.id, stepConfig.id]);
 
@@ -99,6 +123,46 @@ export default function StepEngine({
     if (isGenerating)
       contentEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [content, isGenerating]);
+
+  const loadVersions = async () => {
+    if (!currentProjectId) return;
+    setIsLoadingVersions(true);
+    setError("");
+    try {
+      const rows = await invoke<StepVersion[]>(
+        "workflow/versions",
+        { projectId: currentProjectId, stepNumber: stepConfig.id },
+        { silent: true }
+      );
+      setVersions(Array.isArray(rows) ? rows : []);
+      setShowVersions(true);
+    } catch (err: any) {
+      setError(err.message || "读取版本历史失败");
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
+  const restoreVersion = async (version: StepVersion | any) => {
+    if (!currentProjectId) return;
+    const versionId = getVersionId(version);
+    if (!versionId) return;
+    setRestoringVersionId(versionId);
+    setError("");
+    try {
+      await invoke(
+        "workflow/restore-version",
+        { projectId: currentProjectId, stepNumber: stepConfig.id, versionId },
+        { silent: true }
+      );
+      setContent(getVersionText(version));
+      onProjectChanged?.();
+    } catch (err: any) {
+      setError(err.message || "恢复版本失败");
+    } finally {
+      setRestoringVersionId("");
+    }
+  };
 
   const ensureCheckpointForLaterSteps = async () => {
     if (!currentProjectId || !(stepConfig.id === 7 || stepConfig.id === 8)) return true;
@@ -229,7 +293,7 @@ export default function StepEngine({
 
   const doneSteps = project?.doneSteps || project?.done_steps || [];
   const isApproved = doneSteps.includes(stepConfig.id);
-  const canGenerate = !(isGenerating || isApproving || isSelfchecking || isCheckpointing);
+  const canGenerate = !(isGenerating || isApproving || isSelfchecking || isCheckpointing || isLoadingVersions || Boolean(restoringVersionId));
   const canApprove = Boolean(content.trim()) && canGenerate;
 
   return (
@@ -276,6 +340,14 @@ export default function StepEngine({
             {isSelfchecking ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
             自检
           </button>
+          <button
+            onClick={() => showVersions ? setShowVersions(false) : loadVersions()}
+            disabled={!currentProjectId || isLoadingVersions}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-sm transition-all duration-300 disabled:opacity-40 hover:bg-white/10"
+          >
+            {isLoadingVersions ? <Loader2 className="animate-spin" size={16} /> : <History size={16} />}
+            版本
+          </button>
           <AnimatePresence>
             {content && !isGenerating && (
               <motion.button
@@ -306,6 +378,40 @@ export default function StepEngine({
           <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-100">
             <div className="flex items-center gap-2 font-bold mb-2"><ClipboardCheck size={16} /> after-step-6 checkpoint 已存在</div>
             <div className="line-clamp-3 text-emerald-100/70">{checkpoint}</div>
+          </div>
+        )}
+        {showVersions && (
+          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/80">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 font-bold"><History size={16} /> 版本历史</div>
+              <button className="text-xs text-white/40 hover:text-white" onClick={loadVersions}>刷新</button>
+            </div>
+            {versions.length === 0 ? (
+              <div className="text-white/35">当前步骤暂无历史版本。</div>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                {versions.map((version, index) => {
+                  const versionId = getVersionId(version);
+                  const active = versionId && versionId === getVersionId(activeVersion);
+                  const preview = getVersionText(version).slice(0, 160);
+                  return (
+                    <div key={versionId || index} className={`rounded-xl border p-3 ${active ? "border-indigo-400/40 bg-indigo-500/10" : "border-white/5 bg-black/20"}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-white/90">Version {getVersionNumber(version, index)} {active ? "· 当前" : ""}</div>
+                          <div className="text-xs text-white/35">{getVersionCreatedAt(version) || versionId}</div>
+                        </div>
+                        <button className="btn ghost" onClick={() => restoreVersion(version)} disabled={active || restoringVersionId === versionId}>
+                          {restoringVersionId === versionId ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+                          恢复
+                        </button>
+                      </div>
+                      <div className="mt-2 text-xs text-white/45 line-clamp-2 whitespace-pre-wrap">{preview || "无文本预览"}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         {selfcheckItems.length > 0 && (
