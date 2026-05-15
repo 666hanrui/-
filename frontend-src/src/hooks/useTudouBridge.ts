@@ -12,6 +12,8 @@ const ACTION_MAP: Record<string, string> = {
   "project/delete": "delete_project",
   "screenplay/list-recent": "screenplay_list_recent_projects",
   "screenplay/get": "screenplay_get_project",
+  "screenplay/rename": "screenplay_rename_project",
+  "screenplay/delete": "screenplay_delete_project",
   "workflow/generate": "screenplay_generate_step",
   "workflow/doctor": "doctor_diagnose",
   "script/recent": "get_recent_script_tasks",
@@ -83,6 +85,10 @@ export const useTudouBridge = () => {
               return [] as any;
             if (backendCommand === "load_script_task")
               return { task: payload, outputs: [] } as any;
+            if (backendCommand === "get_projects")
+              return [] as any;
+            if (backendCommand === "screenplay_list_recent_projects")
+              return [] as any;
             if (backendCommand === "screenplay_create_project")
               return { projectId: "mock-uid-001" } as any;
             return { success: true } as any;
