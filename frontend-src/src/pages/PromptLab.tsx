@@ -3,7 +3,7 @@ import { Activity, Film, Image as ImageIcon, Loader2, Save, Wand2 } from "lucide
 import { useEffect, useMemo, useState } from "react";
 import ScriptSelector from "../components/ScriptSelector";
 import { useTudouBridge } from "../hooks/useTudouBridge";
-import { promptSections } from "../lib/format";
+import { getTaskId, promptSections } from "../lib/format";
 import { useAppStore } from "../store/useAppStore";
 import type { PromptResult, ReviewResult, ScriptTask } from "../types/tudou";
 
@@ -13,8 +13,8 @@ interface PromptLabProps {
 
 export default function PromptLab({ kind }: PromptLabProps) {
   const { invoke } = useTudouBridge();
-  const selectedScriptTaskId = useAppStore((state) => state.selectedScriptTaskId);
-  const setSelectedScriptTaskId = useAppStore((state) => state.setSelectedScriptTaskId);
+  const currentTaskId = useAppStore((state) => state.currentTaskId);
+  const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
   const setRealm = useAppStore((state) => state.setRealm);
   const showToast = useAppStore((state) => state.showToast);
 
@@ -38,7 +38,8 @@ export default function PromptLab({ kind }: PromptLabProps) {
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
     setTask(nextTask);
     setSourceText(text);
-    setSelectedScriptTaskId(nextTask.taskId);
+    const taskId = getTaskId(nextTask);
+    if (taskId) setCurrentTaskId(taskId);
     setReview(null);
   };
 
@@ -50,9 +51,9 @@ export default function PromptLab({ kind }: PromptLabProps) {
     try {
       const payload =
         kind === "image"
-          ? { mode: "single", sourceScript: sourceText, visualStyle: style, imageGoal: goal, existingTaskId: result?.taskId }
-          : { mode: "beat", scriptBeats: sourceText, videoStyle: style, motionFocus: goal, existingTaskId: result?.taskId };
-      const next = await invoke<PromptResult>(kind === "image" ? "runImagePromptGeneration" : "runVideoPromptGeneration", [payload], { timeout: 900_000 });
+          ? { mode: "single", sourceScript: sourceText, visualStyle: style, imageGoal: goal, existingTaskId: result?.taskId || result?.task_id }
+          : { mode: "beat", scriptBeats: sourceText, videoStyle: style, motionFocus: goal, existingTaskId: result?.taskId || result?.task_id };
+      const next = await invoke<PromptResult>(kind === "image" ? "prompt/image" : "prompt/video", payload, { timeout: 900_000 });
       setResult(next);
       showToast(`${kind === "image" ? "图像" : "视频"}提示词已生成`);
     } catch (err: any) {
@@ -63,11 +64,12 @@ export default function PromptLab({ kind }: PromptLabProps) {
   };
 
   const runReview = async () => {
-    if (!result?.taskId) return;
+    const taskId = result?.taskId || result?.task_id;
+    if (!taskId) return;
     setBusy("review");
     setError("");
     try {
-      const next = await invoke<ReviewResult>(kind === "image" ? "runImagePromptReview" : "runVideoPromptReview", [{ taskId: result.taskId }], { timeout: 900_000 });
+      const next = await invoke<ReviewResult>(kind === "image" ? "prompt/image-review" : "prompt/video-review", { taskId }, { timeout: 900_000 });
       setReview(next);
       showToast("提示词审核完成");
     } catch (err: any) {
@@ -80,7 +82,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
   return (
     <div className="split">
       <aside className="side-panel">
-        <ScriptSelector selectedTaskId={selectedScriptTaskId} onSelect={onSelectScript} />
+        <ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} />
         <div className="card">
           <p className="eyebrow">Source Script</p>
           <textarea className="textarea script-input" value={sourceText} onChange={(event) => setSourceText(event.target.value)} placeholder="选择剧本后会自动填入，也可以手动粘贴。" />
@@ -100,7 +102,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
               {busy === "generate" ? <Loader2 size={16} className="spin" /> : <Wand2 size={16} />}
               生成提示词
             </button>
-            <button className="btn cyan" onClick={runReview} disabled={busy === "review" || !result?.taskId}>
+            <button className="btn cyan" onClick={runReview} disabled={busy === "review" || !(result?.taskId || result?.task_id)}>
               {busy === "review" ? <Loader2 size={16} className="spin" /> : <Activity size={16} />}
               审核
             </button>
@@ -118,6 +120,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
           </label>
         </div>
 
+        {!task && <div className="notice warn">请选择剧本/项目。没有剧本时不会黑屏，后续可从项目库或剧本任务页进入。</div>}
         {error && <div className="error">{error}</div>}
         {review && (
           <div className={`notice ${review.status === "failed" ? "warn" : ""}`}>
