@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTudouBridge } from "../../hooks/useTudouBridge";
 import { useAppStore } from "../../store/useAppStore";
+import type { ProjectRecord, StepVersion } from "../../types/tudou";
 import {
   Play,
   Edit3,
@@ -9,18 +10,25 @@ import {
   RefreshCw,
   ArrowRight,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface StepEngineProps {
   stepConfig: any;
   isLastStep: boolean;
+  activeVersion?: StepVersion | null;
+  project?: ProjectRecord | null;
+  onProjectChanged?: (project?: ProjectRecord | null) => void;
   onNext: () => void;
 }
 
 export default function StepEngine({
   stepConfig,
   isLastStep,
+  activeVersion,
+  project,
+  onProjectChanged,
   onNext,
 }: StepEngineProps) {
   const { invoke } = useTudouBridge();
@@ -28,10 +36,18 @@ export default function StepEngine({
 
   const [content, setContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [error, setError] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setContent(activeVersion?.output || activeVersion?.text || "");
+    setIsEditing(false);
+    setError("");
+  }, [activeVersion?.id, stepConfig.id]);
 
   useEffect(() => {
     if (isGenerating)
@@ -42,8 +58,10 @@ export default function StepEngine({
     if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
     setIsGenerating(true);
     setContent("");
+    setError("");
     setIsEditing(false);
 
+    let streamed = "";
     let unlistenFn: (() => void) | null = null;
     try {
       unlistenFn = await listen("screenplay:stream-chunk", (event: any) => {
@@ -52,11 +70,12 @@ export default function StepEngine({
           payload.projectId === currentProjectId &&
           payload.stepNumber === stepConfig.id
         ) {
+          streamed += payload.chunk || "";
           setContent((prev) => prev + (payload.chunk || ""));
         }
       });
 
-      await invoke(
+      const result = await invoke<any>(
         "workflow/generate",
         {
           projectId: currentProjectId,
@@ -64,13 +83,47 @@ export default function StepEngine({
         },
         { timeout: 300000 }
       );
+
+      const finalText = result?.text || streamed;
+      if (finalText) setContent(finalText);
+      onProjectChanged?.();
     } catch (error: any) {
-      setContent(`\n\n[CRITICAL ERROR] 引擎推演阻断：${error.message}`);
+      const message = error.message || "生成失败";
+      setError(message);
+      setContent(streamed || `\n\n[CRITICAL ERROR] 引擎推演阻断：${message}`);
     } finally {
       if (unlistenFn) unlistenFn();
       setIsGenerating(false);
     }
   };
+
+  const handleApprove = async () => {
+    if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
+    if (!content.trim()) return;
+    setIsApproving(true);
+    setError("");
+    try {
+      const nextStep = isLastStep ? stepConfig.id : stepConfig.id + 1;
+      const nextProject = await invoke<ProjectRecord>(
+        "workflow/approve",
+        {
+          projectId: currentProjectId,
+          stepNumber: stepConfig.id,
+          nextStep,
+        },
+        { timeout: 120000 }
+      );
+      onProjectChanged?.(nextProject);
+      if (!isLastStep) onNext();
+    } catch (err: any) {
+      setError(err.message || "批准本步失败");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const doneSteps = project?.doneSteps || project?.done_steps || [];
+  const isApproved = doneSteps.includes(stepConfig.id);
 
   return (
     <div className="w-full h-full flex flex-col bg-[#080808]/80 backdrop-blur-2xl rounded-[2rem] border border-white/[0.08] shadow-[0_30px_60px_rgba(0,0,0,0.6)] relative overflow-hidden group">
@@ -84,18 +137,19 @@ export default function StepEngine({
 
       <header className="flex items-center justify-between px-8 py-6 border-b border-white/[0.05] relative z-10">
         <div className="flex flex-col">
-          <h3 className="text-2xl font-bold text-white tracking-widest">
+          <h3 className="text-2xl font-bold text-white tracking-widest flex items-center gap-3">
             {stepConfig.title}
+            {isApproved && <CheckCircle2 size={20} className="text-green-400" />}
           </h3>
           <span className="text-[10px] font-mono text-white/30 uppercase mt-1">
-            Step Module ID: {stepConfig.id}
+            Step Module ID: {stepConfig.id} {activeVersion?.id ? `· Version ${activeVersion.id}` : ""}
           </span>
         </div>
 
         <div className="flex gap-3">
           <button
             onClick={handleIgnite}
-            disabled={isGenerating}
+            disabled={isGenerating || isApproving}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all duration-300 disabled:opacity-50 active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.3)]"
           >
             {isGenerating ? (
@@ -109,7 +163,7 @@ export default function StepEngine({
               ? "流式解算中..."
               : content
               ? "重新推演"
-              : "核心点火"}
+              : "生成"}
           </button>
           <AnimatePresence>
             {content && !isGenerating && (
@@ -132,11 +186,19 @@ export default function StepEngine({
       </header>
 
       <div className="flex-1 p-8 overflow-y-auto custom-scrollbar relative z-10">
+        {error && (
+          <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-100">
+            {error}
+          </div>
+        )}
         {!content && !isGenerating ? (
           <div className="h-full flex flex-col items-center justify-center text-white/20">
             <Play size={48} className="mb-4 opacity-30" />
             <p className="tracking-widest uppercase font-mono text-sm">
               Awaiting Engine Ignition
+            </p>
+            <p className="text-xs text-white/30 mt-2">
+              若这是旧项目，当前步骤还没有 active version 输出。
             </p>
           </div>
         ) : isEditing ? (
@@ -165,22 +227,27 @@ export default function StepEngine({
               isGenerating
                 ? "bg-yellow-400 animate-ping"
                 : content
-                ? "bg-green-400"
+                ? isApproved
+                  ? "bg-green-400"
+                  : "bg-cyan-400"
                 : "bg-white/20"
             }`}
           />
           {isGenerating
             ? "STREAMING DATA..."
+            : isApproved
+            ? "STEP APPROVED"
             : content
             ? "MODULE READY"
             : "STANDBY"}
         </div>
         <button
-          onClick={onNext}
-          disabled={!content || isGenerating}
+          onClick={handleApprove}
+          disabled={!content || isGenerating || isApproving}
           className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm transition-all duration-300 disabled:opacity-20 disabled:scale-100 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group"
         >
-          {isLastStep ? "进入资产锻造" : "进入下一步"}
+          {isApproving ? <Loader2 size={16} className="animate-spin" /> : null}
+          {isLastStep ? "批准并进入资产锻造" : "批准本步并进入下一步"}
           <ArrowRight
             size={16}
             className="group-hover:translate-x-1 transition-transform"
