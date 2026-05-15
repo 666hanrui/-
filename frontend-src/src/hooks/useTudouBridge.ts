@@ -21,6 +21,7 @@ const ACTION_MAP: Record<string, string> = {
   "workflow/rollback": "screenplay_rollback_to",
   "workflow/versions": "screenplay_list_versions",
   "workflow/restore-version": "screenplay_restore_version",
+  "workflow/finalize": "screenplay_finalize_to_script_task",
   "workflow/get-checkpoint": "screenplay_get_checkpoint",
   "workflow/regenerate-checkpoint": "screenplay_regenerate_checkpoint",
   "workflow/doctor": "doctor_diagnose",
