@@ -12,6 +12,7 @@ import {
   Film,
   Clapperboard,
   FolderKanban,
+  FileText,
 } from "lucide-react";
 import { NAV_ITEMS } from "../constants";
 import type { PageId } from "../types/tudou";
@@ -29,6 +30,7 @@ const bgMap = {
 const pathByPage: Record<PageId, string> = {
   hub: "/",
   workflow: "/workflow",
+  scripts: "/scripts",
   assets: "/assets",
   image: "/image",
   video: "/video",
@@ -40,6 +42,7 @@ const pathByPage: Record<PageId, string> = {
 const iconByPage: Record<PageId, React.ReactNode> = {
   hub: <Sparkles size={20} />,
   workflow: <RouteIcon size={20} />,
+  scripts: <FileText size={20} />,
   assets: <Library size={20} />,
   image: <ImageIcon size={20} />,
   video: <Film size={20} />,
@@ -83,21 +86,9 @@ export default function MainLayout() {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentRealm}
-          initial={{
-            opacity: 0,
-            scale: 1.1,
-            filter: "saturate(0%) blur(20px)",
-          }}
-          animate={{
-            opacity: 1,
-            scale: 1,
-            filter: "saturate(100%) blur(0px)",
-          }}
-          exit={{
-            opacity: 0,
-            scale: 0.95,
-            filter: "saturate(0%) blur(20px)",
-          }}
+          initial={{ opacity: 0, scale: 1.1, filter: "saturate(0%) blur(20px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "saturate(100%) blur(0px)" }}
+          exit={{ opacity: 0, scale: 0.95, filter: "saturate(0%) blur(20px)" }}
           transition={{ duration: 1.8, ease: [0.22, 1, 0.36, 1] }}
           className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-60 mix-blend-screen"
           style={{ backgroundImage: `url(${bgMap[currentRealm]})` }}
@@ -117,35 +108,20 @@ export default function MainLayout() {
       >
         <div
           className="pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-          style={{
-            background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255,255,255,0.06), transparent 40%)`,
-          }}
+          style={{ background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255,255,255,0.06), transparent 40%)` }}
         />
 
-        <motion.div
-          variants={itemVariants}
-          className="mb-8 w-12 h-12 rounded-[18px] bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
-        >
+        <motion.div variants={itemVariants} className="mb-8 w-12 h-12 rounded-[18px] bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]">
           <Command className="text-white" size={20} />
         </motion.div>
 
         <nav className="flex flex-col gap-2 relative z-10 w-full px-4 overflow-y-auto custom-scrollbar">
           {NAV_ITEMS.map((item) => (
-            <NavItem
-              key={item.id}
-              icon={iconByPage[item.id]}
-              path={pathByPage[item.id]}
-              currentPath={location.pathname}
-              tooltip={item.label}
-              variants={itemVariants}
-            />
+            <NavItem key={item.id} icon={iconByPage[item.id]} path={pathByPage[item.id]} currentPath={location.pathname} tooltip={item.label} variants={itemVariants} />
           ))}
         </nav>
 
-        <motion.div
-          variants={itemVariants}
-          className="mt-auto relative group cursor-pointer pt-4"
-        >
+        <motion.div variants={itemVariants} className="mt-auto relative group cursor-pointer pt-4">
           <div className="absolute inset-0 bg-indigo-500 rounded-full blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-500" />
           <div className="relative w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-md transition-transform duration-300 hover:scale-105">
             <span className="text-indigo-200 text-sm font-medium tracking-widest drop-shadow-md">
@@ -166,13 +142,9 @@ export default function MainLayout() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/5 backdrop-blur-md">
                 <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)] animate-pulse" />
-                <span className="text-white/40 text-[10px] font-mono tracking-widest uppercase">
-                  Engine Online
-                </span>
+                <span className="text-white/40 text-[10px] font-mono tracking-widest uppercase">Engine Online</span>
               </div>
-              <div className="text-white/20 text-xs tracking-widest font-mono uppercase">
-                Realm // {currentRealm}
-              </div>
+              <div className="text-white/20 text-xs tracking-widest font-mono uppercase">Realm // {currentRealm}</div>
             </div>
           </header>
           <div className="flex-1 w-full h-full relative z-10 pt-16 overflow-hidden">
@@ -186,28 +158,13 @@ export default function MainLayout() {
 
 function NavItem({ icon, path, currentPath, tooltip, variants }: any) {
   const navigate = useNavigate();
-  const isActive =
-    currentPath === path || (path !== "/" && currentPath.startsWith(path));
+  const isActive = currentPath === path || (path !== "/" && currentPath.startsWith(path));
   return (
-    <motion.div
-      variants={variants}
-      className="relative group w-full flex justify-center"
-    >
+    <motion.div variants={variants} className="relative group w-full flex justify-center">
       {isActive && (
-        <motion.div
-          layoutId="navGlow"
-          className="absolute inset-0 bg-white/10 rounded-xl border border-white/10"
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        />
+        <motion.div layoutId="navGlow" className="absolute inset-0 bg-white/10 rounded-xl border border-white/10" transition={{ type: "spring", stiffness: 400, damping: 30 }} />
       )}
-      <button
-        onClick={() => navigate(path)}
-        className={`relative z-10 w-full py-3 flex justify-center rounded-xl transition-all duration-300 ${
-          isActive
-            ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
-            : "text-white/30 hover:text-white/70 hover:bg-white/[0.03]"
-        }`}
-      >
+      <button onClick={() => navigate(path)} className={`relative z-10 w-full py-3 flex justify-center rounded-xl transition-all duration-300 ${isActive ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-white/30 hover:text-white/70 hover:bg-white/[0.03]"}`}>
         {icon}
       </button>
       <div className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#111] border border-white/10 text-white/90 text-xs tracking-widest rounded-lg opacity-0 translate-x-[-8px] pointer-events-none group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 shadow-2xl z-50 whitespace-nowrap">
