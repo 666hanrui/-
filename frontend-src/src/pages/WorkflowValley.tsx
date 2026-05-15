@@ -1,27 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../store/useAppStore";
 import StepEngine from "../components/workflow/StepEngine";
 import AiDoctorPanel from "../components/workflow/AiDoctorPanel";
+import { WORKFLOW_STEPS } from "../constants";
+import { getActiveVersion } from "../lib/format";
+import type { ProjectRecord } from "../types/tudou";
 import {
   CheckCircle2,
   Circle,
   Activity,
   ChevronRight,
   Wand2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-const WORKFLOW_STEPS = [
-  { id: 1, title: "概念与动机", desc: "确立故事内核" },
-  { id: 2, title: "故事大纲", desc: "三幕结构骨架" },
-  { id: 3, title: "角色图谱", desc: "核心人物档案" },
-  { id: 4, title: "世界观构建", desc: "规则与环境设定" },
-  { id: 5, title: "分场事件", desc: "场景节拍表" },
-  { id: 6, title: "对白精修", desc: "角色声音区分" },
-  { id: 7, title: "情绪曲线检查", desc: "张力与节奏" },
-  { id: 8, title: "终稿格式化", desc: "好莱坞标准排版" },
-];
+import { useTudouBridge } from "../hooks/useTudouBridge";
 
 export default function WorkflowValley() {
   const {
@@ -29,17 +24,58 @@ export default function WorkflowValley() {
     currentStep,
     setCurrentStep,
     scriptSeed,
+    setScriptSeed,
+    currentProjectId,
+    setCurrentProjectId,
+    setCurrentTaskId,
     isDoctorPanelOpen,
     setDoctorPanelOpen,
   } = useAppStore();
+  const { invoke } = useTudouBridge();
   const navigate = useNavigate();
   const [direction, setDirection] = useState(1);
+  const [project, setProject] = useState<ProjectRecord | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setRealm("valley");
   }, [setRealm]);
 
-  if (!scriptSeed) {
+  const reloadProject = async () => {
+    if (!currentProjectId) return;
+    setIsLoadingProject(true);
+    setError("");
+    try {
+      const next = await invoke<ProjectRecord | null>("screenplay/get", { projectId: currentProjectId }, { silent: true });
+      if (!next) {
+        setError("未找到该工作流项目，请从项目库重新选择。 ");
+        return;
+      }
+      setProject(next);
+      const init = next.init || {};
+      setScriptSeed(String(init.concept || init.name || scriptSeed || ""));
+      setCurrentProjectId(next.projectId || next.project_id || currentProjectId);
+      setCurrentTaskId(next.linkedScriptTaskId || next.linked_script_task_id || null);
+      const backendStep = Number(next.currentStep || next.current_step || 1);
+      const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
+      setCurrentStep(nextIndex);
+    } catch (err: any) {
+      setError(err.message || "恢复工作流项目失败");
+    } finally {
+      setIsLoadingProject(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadProject();
+  }, [currentProjectId]);
+
+  const activeStep = WORKFLOW_STEPS[currentStep] || WORKFLOW_STEPS[0];
+  const activeVersion = useMemo(() => getActiveVersion(project, activeStep.id), [project, activeStep.id]);
+  const doneSteps = project?.doneSteps || project?.done_steps || [];
+
+  if (!currentProjectId && !scriptSeed) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-black/20 backdrop-blur-md">
         <Wand2 size={48} className="text-white/20 mb-4" />
@@ -47,21 +83,44 @@ export default function WorkflowValley() {
           引擎缺少初始参数
         </h2>
         <p className="text-white/50 mb-6 text-sm">
-          请返回灵感枢纽输入宇宙碎片
+          请返回灵感枢纽输入宇宙碎片，或从项目库打开已有项目。
         </p>
-        <button
-          onClick={() => navigate("/")}
-          className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
-        >
-          返回枢纽
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate("/")}
+            className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+          >
+            返回枢纽
+          </button>
+          <button
+            onClick={() => navigate("/projects")}
+            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-all"
+          >
+            打开项目库
+          </button>
+        </div>
       </div>
     );
   }
 
   const handleStepChange = (newStep: number) => {
-    setDirection(newStep > currentStep ? 1 : -1);
-    setCurrentStep(newStep);
+    const safeStep = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, newStep));
+    setDirection(safeStep > currentStep ? 1 : -1);
+    setCurrentStep(safeStep);
+  };
+
+  const handleProjectChanged = (nextProject?: ProjectRecord | null) => {
+    if (nextProject) {
+      setProject(nextProject);
+      const backendStep = Number(nextProject.currentStep || nextProject.current_step || activeStep.id);
+      const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
+      setCurrentStep(nextIndex);
+      if (nextProject.linkedScriptTaskId || nextProject.linked_script_task_id) {
+        setCurrentTaskId(nextProject.linkedScriptTaskId || nextProject.linked_script_task_id || null);
+      }
+      return;
+    }
+    reloadProject();
   };
 
   return (
@@ -86,7 +145,7 @@ export default function WorkflowValley() {
           />
           {WORKFLOW_STEPS.map((step, index) => {
             const isActive = currentStep === index;
-            const isCompleted = currentStep > index;
+            const isCompleted = doneSteps.includes(step.id) || currentStep > index;
             return (
               <div
                 key={step.id}
@@ -160,9 +219,23 @@ export default function WorkflowValley() {
             GENESIS SEED:
           </span>
           <span className="text-sm text-white/90 truncate max-w-md italic">
-            {scriptSeed}
+            {scriptSeed || project?.init?.concept || project?.init?.name || "未命名项目"}
           </span>
         </div>
+
+        {isLoadingProject && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+            <div className="flex items-center gap-3 text-white/70 bg-black/60 border border-white/10 px-5 py-3 rounded-2xl">
+              <Loader2 size={18} className="animate-spin" /> 正在恢复工作流状态...
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-red-950/80 border border-red-500/30 text-red-100 px-4 py-2 rounded-2xl text-sm">
+            <AlertTriangle size={16} /> {error}
+          </div>
+        )}
+
         <div className="flex-1 w-full h-full relative mt-14">
           <AnimatePresence initial={false} mode="wait" custom={direction}>
             <motion.div
@@ -199,8 +272,11 @@ export default function WorkflowValley() {
               className="absolute inset-0 w-full h-full"
             >
               <StepEngine
-                stepConfig={WORKFLOW_STEPS[currentStep]}
+                stepConfig={activeStep}
                 isLastStep={currentStep === WORKFLOW_STEPS.length - 1}
+                activeVersion={activeVersion}
+                project={project}
+                onProjectChanged={handleProjectChanged}
                 onNext={() => handleStepChange(currentStep + 1)}
               />
             </motion.div>
