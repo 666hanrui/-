@@ -87,8 +87,6 @@ export default function PromptLab({ kind }: PromptLabProps) {
             };
       const next = await invoke<PromptResult>(kind === "image" ? "prompt/image" : "prompt/video", payload, { timeout: 900_000 });
       setResult(next);
-      const promptTaskId = resultTaskId(next);
-      if (promptTaskId) setCurrentTaskId(promptTaskId);
       showToast(`${kind === "image" ? "图像" : "视频"}提示词已生成`);
     } catch (err: any) {
       setError(err.message || "提示词生成失败");
