@@ -1,6 +1,7 @@
 pub mod asset_extraction;
 pub mod duration;
 pub mod prompt_generation;
+pub mod prompt_quality;
 pub mod prompt_tasks;
 pub mod screenplay;
 pub mod screenplay_store;
