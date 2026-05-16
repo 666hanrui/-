@@ -5,6 +5,7 @@
     "frontend:build": "vite build --config frontend-src/vite.config.ts",
     "frontend:dev": "vite --config frontend-src/vite.config.ts --host 127.0.0.1 --port 5173",
     "frontend:typecheck": "tsc -p frontend-src/tsconfig.json --noEmit",
+    "prompt:manifest": "node scripts/generate-prompt-manifest.mjs",
     "tauri": "tauri"
   },
   "devDependencies": {
