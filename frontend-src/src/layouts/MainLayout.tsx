@@ -65,7 +65,7 @@ const itemVariants = {
     opacity: 1,
     x: 0,
     filter: "blur(0px)",
-    transition: { type: "spring", damping: 20 },
+    transition: { type: "spring" as const, damping: 20 },
   },
 };
 
@@ -162,7 +162,7 @@ function NavItem({ icon, path, currentPath, tooltip, variants }: any) {
   return (
     <motion.div variants={variants} className="relative group w-full flex justify-center">
       {isActive && (
-        <motion.div layoutId="navGlow" className="absolute inset-0 bg-white/10 rounded-xl border border-white/10" transition={{ type: "spring", stiffness: 400, damping: 30 }} />
+        <motion.div layoutId="navGlow" className="absolute inset-0 bg-white/10 rounded-xl border border-white/10" transition={{ type: "spring" as const, stiffness: 400, damping: 30 }} />
       )}
       <button onClick={() => navigate(path)} className={`relative z-10 w-full py-3 flex justify-center rounded-xl transition-all duration-300 ${isActive ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]" : "text-white/30 hover:text-white/70 hover:bg-white/[0.03]"}`}>
         {icon}
