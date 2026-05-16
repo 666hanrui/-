@@ -6,33 +6,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = join(__dirname, "..");
 const promptsDir = join(repoRoot, "src-tauri", "src", "llm", "prompts");
-const manifestPath = join(promptsDir, "manifest.json");
-
-const PROMPT_FILES = [
-  { file: "step1.txt", usage: "workflow step 1 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step2.txt", usage: "workflow step 2 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step3.txt", usage: "workflow step 3 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step4.txt", usage: "workflow step 4 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step5.txt", usage: "workflow step 5 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step6.txt", usage: "workflow step 6 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step7.txt", usage: "workflow step 7 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "step8.txt", usage: "workflow step 8 generation", contextType: "screenplay_step", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "selfcheck.txt", usage: "workflow selfcheck", contextType: "screenplay_selfcheck", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "checkpoint.txt", usage: "workflow after-step-6 checkpoint", contextType: "screenplay_checkpoint", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_script_planning.txt", usage: "script planning", contextType: null, promptSlug: "script_planning", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_script_writing.txt", usage: "script writing", contextType: null, promptSlug: "script_writing", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_script_review.txt", usage: "script review", contextType: null, promptSlug: "script_review", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_asset_character.txt", usage: "asset extraction - character", contextType: null, promptSlug: "asset_character", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file; literal \\n newlines restored to real line breaks", exactMatch: "unknown", diffReason: "format normalization applied; original reference hash not supplied" },
-  { file: "slug_asset_scene.txt", usage: "asset extraction - scene", contextType: null, promptSlug: "asset_scene", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file; literal \\n newlines restored to real line breaks", exactMatch: "unknown", diffReason: "format normalization applied; original reference hash not supplied" },
-  { file: "slug_asset_prop.txt", usage: "asset extraction - prop", contextType: null, promptSlug: "asset_prop", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file; literal \\n newlines restored to real line breaks", exactMatch: "unknown", diffReason: "format normalization applied; original reference hash not supplied" },
-  { file: "slug_prompt_segment_planning.txt", usage: "prompt segment planning", contextType: null, promptSlug: "prompt_segment_planning", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_prompt_seedance_scene.txt", usage: "prompt seedance scene", contextType: null, promptSlug: "prompt_seedance_scene", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_image_prompt_generation.txt", usage: "image prompt generation", contextType: null, promptSlug: "image_prompt_generation", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_video_prompt_generation.txt", usage: "video prompt generation", contextType: null, promptSlug: "video_prompt_generation", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "slug_prompt_review.txt", usage: "prompt quality review", contextType: null, promptSlug: "prompt_review", callEntry: "request_prompt_llm", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "ctx_seedance_phase_ad.txt", usage: "Seedance V5 Phase A-D", contextType: "seedance_phase_ad", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" },
-  { file: "ctx_seedance_unit_efg.txt", usage: "Seedance V5 Unit E/F/G", contextType: "seedance_unit_efg", promptSlug: null, callEntry: "request_contextual_llm_stream", originalSource: "restored repository prompt file", exactMatch: "unknown", diffReason: "original reference hash not supplied" }
-];
+const activeManifestPath = join(promptsDir, "manifest.json");
+const archiveRoot = join(repoRoot, "original-prompt-archive");
+const archiveManifestPath = join(archiveRoot, "manifest.json");
 
 function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -42,43 +18,106 @@ function countLiteralNewlines(text) {
   return (text.match(/\\n/g) || []).length;
 }
 
-const files = PROMPT_FILES.map((entry) => {
-  const fullPath = join(promptsDir, entry.file);
-  const exists = existsSync(fullPath);
-  const bytes = exists ? readFileSync(fullPath) : Buffer.alloc(0);
-  const text = bytes.toString("utf8");
-  const literalNewlineCount = countLiteralNewlines(text);
-  const empty = bytes.length === 0;
+function readJson(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+if (!existsSync(archiveManifestPath)) {
+  console.error("missing original prompt archive manifest:", relative(repoRoot, archiveManifestPath));
+  process.exit(1);
+}
+
+const archiveManifest = readJson(archiveManifestPath);
+const archiveFiles = Array.isArray(archiveManifest.files) ? archiveManifest.files : [];
+if (archiveFiles.length !== 23) {
+  console.error(`expected 23 archived prompts, found ${archiveFiles.length}`);
+  process.exit(1);
+}
+
+const files = archiveFiles.map((source) => {
+  const activePath = join(repoRoot, source.sourcePath);
+  const rawPath = join(archiveRoot, source.archivePath);
+  const activeExists = existsSync(activePath);
+  const rawExists = existsSync(rawPath);
+  const activeBytes = activeExists ? readFileSync(activePath) : Buffer.alloc(0);
+  const rawBytes = rawExists ? readFileSync(rawPath) : Buffer.alloc(0);
+  const activeSha256 = activeExists ? sha256(activeBytes) : null;
+  const rawSha256 = rawExists ? sha256(rawBytes) : null;
+  const archiveSha256 = source.sha256 || null;
+  const rawMatchesArchive = rawExists && rawSha256 === archiveSha256;
+  const exactMatch = activeExists && rawExists && Buffer.compare(activeBytes, rawBytes) === 0;
+  const activeText = activeBytes.toString("utf8");
+
   return {
-    ...entry,
-    path: relative(repoRoot, fullPath).replaceAll("\\", "/"),
-    exists,
-    empty,
-    byteSize: bytes.length,
-    sha256: exists ? sha256(bytes) : null,
-    lineCount: exists ? text.split(/\r?\n/).length : 0,
-    literalNewlineCount,
-    auditStatus: exists && !empty && literalNewlineCount < 5 ? "ok" : "needs_review"
+    file: source.file,
+    category: source.category,
+    stage: source.stage,
+    usageKey: source.usageKey,
+    sourceCommit: source.sourceCommit,
+    sourceCommitSubject: source.sourceCommitSubject,
+    originalSourcePath: source.sourcePath,
+    rawArchivePath: `original-prompt-archive/${source.archivePath}`,
+    activePath: source.sourcePath,
+    callEntry: source.usageKey?.startsWith("contextType=") ? "request_contextual_llm_stream" : "request_prompt_llm",
+    contextType: source.usageKey?.startsWith("contextType=") ? source.usageKey.replace("contextType=", "") : null,
+    promptSlug: source.usageKey?.startsWith("promptSlug=") ? source.usageKey.replace("promptSlug=", "") : null,
+    activeExists,
+    rawExists,
+    byteSize: activeBytes.length,
+    rawByteSize: rawBytes.length,
+    activeSha256,
+    rawSha256,
+    archiveSha256,
+    rawMatchesArchive,
+    exactMatch,
+    exactMatchSource: "original-prompt-archive/raw-original",
+    diffReason: exactMatch ? null : "active prompt bytes differ from raw-original archive",
+    lineCount: activeExists ? activeText.split(/\r?\n/).length : 0,
+    literalNewlineCount: activeExists ? countLiteralNewlines(activeText) : 0,
+    hasLiteralEscapedNewlines: source.hasLiteralEscapedNewlines,
+    firstSeenInHistory: source.firstSeenInHistory,
+    note: source.note,
+    auditStatus: activeExists && rawExists && rawMatchesArchive && exactMatch ? "ok" : "failed"
   };
 });
 
 const manifest = {
-  version: 2,
+  version: 3,
   generatedBy: "scripts/generate-prompt-manifest.mjs",
   generatedAt: new Date().toISOString(),
+  authority: "original-prompt-archive/manifest.json + original-prompt-archive/raw-original",
+  archiveCreatedAt: archiveManifest.createdAt,
+  primaryOriginalCommit: archiveManifest.primaryOriginalCommit,
+  v3AddedPromptCommit: archiveManifest.v3AddedPromptCommit,
   promptDir: "src-tauri/src/llm/prompts",
-  note: "byteSize and sha256 are generated from local repository bytes. exactMatch remains unknown until an original reference hash/source is supplied.",
+  total: files.length,
+  exactMatches: files.filter((file) => file.exactMatch).length,
+  failures: files.filter((file) => file.auditStatus !== "ok").map((file) => ({
+    file: file.file,
+    activePath: file.activePath,
+    rawArchivePath: file.rawArchivePath,
+    activeSha256: file.activeSha256,
+    rawSha256: file.rawSha256,
+    archiveSha256: file.archiveSha256,
+    activeExists: file.activeExists,
+    rawExists: file.rawExists,
+    rawMatchesArchive: file.rawMatchesArchive,
+    exactMatch: file.exactMatch,
+    diffReason: file.diffReason
+  })),
   files
 };
 
-writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+writeFileSync(activeManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
-const failed = files.filter((file) => !file.exists || file.empty || file.literalNewlineCount >= 5);
-console.log(`prompt manifest written: ${relative(repoRoot, manifestPath)}`);
-console.log(`files: ${files.length}, needs_review: ${failed.length}`);
-if (failed.length) {
-  for (const file of failed) {
-    console.log(`needs_review ${file.file}: exists=${file.exists} empty=${file.empty} literalNewlineCount=${file.literalNewlineCount}`);
+console.log(`prompt manifest written: ${relative(repoRoot, activeManifestPath)}`);
+console.log(`archive prompts: ${files.length}`);
+console.log(`exact matches: ${manifest.exactMatches}/${manifest.total}`);
+if (manifest.failures.length > 0) {
+  console.error("prompt archive verification failed:");
+  for (const failure of manifest.failures) {
+    console.error(JSON.stringify(failure, null, 2));
   }
-  process.exitCode = 1;
+  process.exit(1);
 }
+console.log("prompt archive verification passed: 23/23 active prompts match raw-original bytes");
