@@ -1,4 +1,4 @@
-import { Boxes, Edit3, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Save, Trash2, Workflow, X } from "lucide-react";
+import { Boxes, Edit3, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Save, Trash2, Workflow, X, FileText, Clapperboard } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTudouBridge } from "../hooks/useTudouBridge";
@@ -9,6 +9,7 @@ import type { PageId } from "../types/tudou";
 const PAGE_PATH: Record<PageId, string> = {
   hub: "/",
   workflow: "/workflow",
+  scripts: "/scripts",
   assets: "/assets",
   image: "/image",
   video: "/video",
@@ -28,6 +29,26 @@ type ArchiveProject = {
   source: "screenplay" | "sqlite";
   raw?: any;
 };
+
+function taskIdOf(task: any) {
+  return task?.taskId || task?.task_id || "";
+}
+
+function modulePage(moduleType: string): PageId {
+  if (moduleType === "image") return "image";
+  if (moduleType === "video") return "video";
+  if (moduleType === "seedance") return "seedance";
+  if (moduleType === "asset" || moduleType === "assets") return "assets";
+  return "scripts";
+}
+
+function moduleIcon(moduleType: string) {
+  if (moduleType === "image") return ImageIcon;
+  if (moduleType === "video") return Film;
+  if (moduleType === "seedance") return Clapperboard;
+  if (moduleType === "asset" || moduleType === "assets") return Boxes;
+  return FileText;
+}
 
 export default function ProjectsPage() {
   const { invoke } = useTudouBridge();
@@ -74,16 +95,15 @@ export default function ProjectsPage() {
     if (!projectId) return null;
     const detail = await invoke<any>("screenplay/get", { projectId }, { silent: true }).catch(() => null);
     const init = detail?.init || summary.init || {};
+    const linkedTaskId = detail?.linkedScriptTaskId || detail?.linked_script_task_id;
     return {
       projectId,
       projectName: init.name || summary.name || init.concept || projectId,
       moduleType: "workflow",
       status: detail ? `step-${detail.currentStep || detail.current_step || 1}` : "workflow",
       latestDate: detail?.updatedAt || detail?.updated_at || summary.updatedAt || summary.updated_at,
-      taskCount: detail?.linkedScriptTaskId || detail?.linked_script_task_id ? 1 : 0,
-      tasks: detail?.linkedScriptTaskId || detail?.linked_script_task_id
-        ? [{ taskId: detail.linkedScriptTaskId || detail.linked_script_task_id, moduleType: "script", stage: "linked", mode: "workflow-finalized", updatedAt: detail.updatedAt || detail.updated_at }]
-        : [],
+      taskCount: linkedTaskId ? 1 : 0,
+      tasks: linkedTaskId ? [{ taskId: linkedTaskId, moduleType: "script", stage: "workflow-finalized", mode: "workflow", updatedAt: detail.updatedAt || detail.updated_at }] : [],
       source: "screenplay",
       raw: detail || summary,
     };
@@ -97,19 +117,11 @@ export default function ProjectsPage() {
         invoke<any[]>("project/get-all", {}, { silent: true }).catch(() => []),
         invoke<any[]>("screenplay/list-recent", { limit: 50 }, { silent: true }).catch(() => []),
       ]);
-
       const sqliteProjects = Array.isArray(sqliteRows) ? sqliteRows.map(normalizeSqliteProject) : [];
-      const screenplayProjects = await Promise.all(
-        (Array.isArray(screenplayRows) ? screenplayRows : []).map(normalizeScreenplayProject)
-      );
-
+      const screenplayProjects = await Promise.all((Array.isArray(screenplayRows) ? screenplayRows : []).map(normalizeScreenplayProject));
       const merged = new Map<string, ArchiveProject>();
-      for (const item of sqliteProjects) {
-        if (item.projectId) merged.set(`sqlite:${item.projectId}`, item);
-      }
-      for (const item of screenplayProjects) {
-        if (item?.projectId) merged.set(`screenplay:${item.projectId}`, item);
-      }
+      for (const item of sqliteProjects) if (item.projectId) merged.set(`sqlite:${item.projectId}`, item);
+      for (const item of screenplayProjects) if (item?.projectId) merged.set(`screenplay:${item.projectId}`, item);
       setProjects([...merged.values()]);
     } catch (err: any) {
       setError(err.message || "读取项目库失败");
@@ -129,7 +141,8 @@ export default function ProjectsPage() {
 
   const openTask = (project: ArchiveProject, task: any, page: PageId) => {
     setCurrentProjectId(project.projectId || null);
-    if (task?.taskId || task?.task_id) setCurrentTaskId(task.taskId || task.task_id);
+    const taskId = taskIdOf(task);
+    if (taskId) setCurrentTaskId(taskId);
     navigate(PAGE_PATH[page]);
   };
 
@@ -148,11 +161,8 @@ export default function ProjectsPage() {
     if (!nextName) return;
     setBusy(`rename:${project.projectId}`);
     try {
-      if (project.source === "screenplay") {
-        await invoke("screenplay/rename", { projectId: project.projectId, newName: nextName }, { silent: true });
-      } else {
-        await invoke("project/rename", { projectId: project.projectId, newName: nextName }, { silent: true });
-      }
+      if (project.source === "screenplay") await invoke("screenplay/rename", { projectId: project.projectId, newName: nextName }, { silent: true });
+      else await invoke("project/rename", { projectId: project.projectId, newName: nextName }, { silent: true });
       setProjects((prev) => prev.map((item) => item.source === project.source && item.projectId === project.projectId ? { ...item, projectName: nextName } : item));
       cancelRename();
       showToast("项目已重命名");
@@ -166,11 +176,8 @@ export default function ProjectsPage() {
   const removeProject = async (project: ArchiveProject) => {
     setBusy(`delete:${project.projectId}`);
     try {
-      if (project.source === "screenplay") {
-        await invoke("screenplay/delete", { projectId: project.projectId }, { silent: true });
-      } else {
-        await invoke("project/delete", { projectId: project.projectId }, { silent: true });
-      }
+      if (project.source === "screenplay") await invoke("screenplay/delete", { projectId: project.projectId }, { silent: true });
+      else await invoke("project/delete", { projectId: project.projectId }, { silent: true });
       setProjects((prev) => prev.filter((item) => !(item.source === project.source && item.projectId === project.projectId)));
       showToast("项目已删除");
     } catch (err: any) {
@@ -185,14 +192,9 @@ export default function ProjectsPage() {
       <div className="section-head">
         <div>
           <p className="eyebrow">Local Archive</p>
-          <h2>
-            <FolderKanban size={24} /> 项目库
-          </h2>
+          <h2><FolderKanban size={24} /> 项目库</h2>
         </div>
-        <button className="btn" onClick={loadProjects} disabled={busy === "load"}>
-          {busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-          刷新
-        </button>
+        <button className="btn" onClick={loadProjects} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}刷新</button>
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -211,59 +213,34 @@ export default function ProjectsPage() {
               <div className="section-head">
                 <div className="flex-1">
                   <p className="eyebrow">{project.source} · {project.moduleType}</p>
-                  {isEditing ? (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input className="input" value={editingName} onChange={(event) => setEditingName(event.target.value)} autoFocus />
-                      <button className="btn cyan" onClick={() => saveRename(project)} disabled={renaming}>
-                        {renaming ? <Loader2 size={16} className="spin" /> : <Save size={16} />}
-                      </button>
-                      <button className="btn ghost" onClick={cancelRename}><X size={16} /></button>
-                    </div>
-                  ) : (
-                    <h3>{project.projectName}</h3>
-                  )}
+                  {isEditing ? <div className="flex items-center gap-2 mt-2"><input className="input" value={editingName} onChange={(event) => setEditingName(event.target.value)} autoFocus /><button className="btn cyan" onClick={() => saveRename(project)} disabled={renaming}>{renaming ? <Loader2 size={16} className="spin" /> : <Save size={16} />}</button><button className="btn ghost" onClick={cancelRename}><X size={16} /></button></div> : <h3>{project.projectName}</h3>}
                   <p className="row-meta">{project.status || "active"} · {formatDate(project.latestDate)} · {project.taskCount ?? tasks.length} tasks</p>
                 </div>
                 <div className="top-actions">
-                  <button className="btn ghost" onClick={() => startRename(project)} disabled={isEditing} title="重命名项目">
-                    <Edit3 size={16} />
-                  </button>
-                  <button className="btn ghost" onClick={() => removeProject(project)} disabled={deleting} title="删除项目">
-                    {deleting ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />}
-                  </button>
+                  <button className="btn ghost" onClick={() => startRename(project)} disabled={isEditing} title="重命名项目"><Edit3 size={16} /></button>
+                  <button className="btn ghost" onClick={() => removeProject(project)} disabled={deleting} title="删除项目">{deleting ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />}</button>
                 </div>
               </div>
-              <div className="table-list">
-                {project.source === "screenplay" && (
-                  <button className="row-card" onClick={() => openWorkflowProject(project)}>
-                    <span>
-                      <span className="row-title"><Workflow size={15} /> 打开工作流项目</span>
-                      <span className="row-meta">恢复 currentProjectId / currentStep / concept</span>
-                    </span>
-                  </button>
-                )}
 
-                {tasks.length === 0 && project.source !== "screenplay" && (
-                  <button className="row-card" onClick={() => openTask(project, null, "workflow")}>
-                    <span>
-                      <span className="row-title"><Workflow size={15} /> 打开项目</span>
-                      <span className="row-meta">project shell</span>
-                    </span>
-                  </button>
-                )}
-
+              <div className="notice">链路：工作流项目 → 剧本任务 → 资产矩阵 → Prompt 输出 → Seedance Units</div>
+              <div className="table-list mt-4">
+                {project.source === "screenplay" && <button className="row-card" onClick={() => openWorkflowProject(project)}><span><span className="row-title"><Workflow size={15} /> 打开工作流项目</span><span className="row-meta">恢复 currentProjectId / currentStep / concept</span></span></button>}
+                {tasks.length === 0 && project.source !== "screenplay" && <button className="row-card" onClick={() => openTask(project, null, "scripts")}><span><span className="row-title"><FileText size={15} /> 打开剧本任务入口</span><span className="row-meta">无 task 明细时进入 /scripts 统一入口</span></span></button>}
                 {tasks.map((task: any) => {
                   const moduleType = task.moduleType || task.module_type || "script";
-                  const page: PageId = moduleType === "image" ? "image" : moduleType === "video" ? "video" : "assets";
-                  const Icon = moduleType === "image" ? ImageIcon : moduleType === "video" ? Film : Boxes;
-                  return (
-                    <button className="row-card select-row" key={task.taskId || task.task_id} onClick={() => openTask(project, task, page)}>
-                      <span>
-                        <span className="row-title"><Icon size={15} /> {moduleType} · {task.taskId || task.task_id}</span>
-                        <span className="row-meta">{task.mode || "default"} · {task.stage || "ready"} · {formatDate(task.updatedAt || task.updated_at)}</span>
-                      </span>
-                    </button>
-                  );
+                  const page = modulePage(moduleType);
+                  const Icon = moduleIcon(moduleType);
+                  const taskId = taskIdOf(task);
+                  return <div className="row-card" key={taskId || `${moduleType}-${task.updatedAt || task.updated_at || Math.random()}`}>
+                    <span><span className="row-title"><Icon size={15} /> {moduleType} · {taskId}</span><span className="row-meta">{task.mode || "default"} · {task.stage || "ready"} · {formatDate(task.updatedAt || task.updated_at)}</span></span>
+                    <div className="top-actions">
+                      <button className="btn ghost" onClick={() => openTask(project, task, page)}>{page === "scripts" ? "剧本" : "打开"}</button>
+                      {page === "scripts" && <button className="btn ghost" onClick={() => openTask(project, task, "assets")}>资产</button>}
+                      {page === "scripts" && <button className="btn ghost" onClick={() => openTask(project, task, "image")}>图像</button>}
+                      {page === "scripts" && <button className="btn ghost" onClick={() => openTask(project, task, "video")}>视频</button>}
+                      {page === "scripts" && <button className="btn ghost" onClick={() => openTask(project, task, "seedance")}>Seedance</button>}
+                    </div>
+                  </div>;
                 })}
               </div>
             </article>
