@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "note": "Prompt audit manifest. byteSize and sha256 are intentionally null until generated locally from repository bytes; do not hand-fill hashes.",
+  "files": [
+    { "file": "step1.txt", "usage": "workflow step 1 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step2.txt", "usage": "workflow step 2 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step3.txt", "usage": "workflow step 3 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step4.txt", "usage": "workflow step 4 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step5.txt", "usage": "workflow step 5 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step6.txt", "usage": "workflow step 6 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step7.txt", "usage": "workflow step 7 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "step8.txt", "usage": "workflow step 8 generation", "contextType": "screenplay_step", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "selfcheck.txt", "usage": "workflow selfcheck", "contextType": "screenplay_selfcheck", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "checkpoint.txt", "usage": "workflow after-step-6 checkpoint", "contextType": "screenplay_checkpoint", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "slug_script_planning.txt", "usage": "script planning", "contextType": null, "promptSlug": "script_planning", "byteSize": null, "sha256": null },
+    { "file": "slug_script_writing.txt", "usage": "script writing", "contextType": null, "promptSlug": "script_writing", "byteSize": null, "sha256": null },
+    { "file": "slug_script_review.txt", "usage": "script review", "contextType": null, "promptSlug": "script_review", "byteSize": null, "sha256": null },
+    { "file": "slug_asset_character.txt", "usage": "asset extraction - character", "contextType": null, "promptSlug": "asset_character", "byteSize": null, "sha256": null },
+    { "file": "slug_asset_scene.txt", "usage": "asset extraction - scene", "contextType": null, "promptSlug": "asset_scene", "byteSize": null, "sha256": null },
+    { "file": "slug_asset_prop.txt", "usage": "asset extraction - prop", "contextType": null, "promptSlug": "asset_prop", "byteSize": null, "sha256": null },
+    { "file": "slug_prompt_segment_planning.txt", "usage": "prompt segment planning", "contextType": null, "promptSlug": "prompt_segment_planning", "byteSize": null, "sha256": null },
+    { "file": "slug_prompt_seedance_scene.txt", "usage": "prompt seedance scene", "contextType": null, "promptSlug": "prompt_seedance_scene", "byteSize": null, "sha256": null },
+    { "file": "slug_image_prompt_generation.txt", "usage": "image prompt generation", "contextType": null, "promptSlug": "image_prompt_generation", "byteSize": null, "sha256": null },
+    { "file": "slug_video_prompt_generation.txt", "usage": "video prompt generation", "contextType": null, "promptSlug": "video_prompt_generation", "byteSize": null, "sha256": null },
+    { "file": "slug_prompt_review.txt", "usage": "prompt quality review", "contextType": null, "promptSlug": "prompt_review", "byteSize": null, "sha256": null },
+    { "file": "ctx_seedance_phase_ad.txt", "usage": "Seedance V5 Phase A-D", "contextType": "seedance_phase_ad", "promptSlug": null, "byteSize": null, "sha256": null },
+    { "file": "ctx_seedance_unit_efg.txt", "usage": "Seedance V5 Unit E/F/G", "contextType": "seedance_unit_efg", "promptSlug": null, "byteSize": null, "sha256": null }
+  ]
+}
