@@ -2,7 +2,24 @@
 
 This document defines the Stage 3 prompt provenance acceptance process. Compile success is not enough.
 
-## Generate the prompt manifest
+## Authority source
+
+The authority source is:
+
+```text
+original-prompt-archive/manifest.json
+original-prompt-archive/raw-original/
+```
+
+The active runtime prompt directory is:
+
+```text
+src-tauri/src/llm/prompts/
+```
+
+The active prompt files must match the raw-original archive byte-for-byte.
+
+## Generate and verify the active manifest
 
 Run from repository root:
 
@@ -16,19 +33,30 @@ This updates:
 src-tauri/src/llm/prompts/manifest.json
 ```
 
-The generator computes these fields from local repository bytes:
+The generator reads the archive manifest, loads each raw-original file, then compares it with the active prompt file.
+
+The script computes:
 
 ```text
+activeSha256
+rawSha256
+archiveSha256
+rawMatchesArchive
+exactMatch
 byteSize
-sha256
+rawByteSize
 lineCount
 literalNewlineCount
-exists
-empty
 auditStatus
 ```
 
-The script fails when a prompt file is missing, empty, or contains many literal backslash-n sequences.
+The script fails unless all 23 active prompts match the raw-original bytes.
+
+Expected success line:
+
+```text
+prompt archive verification passed: 23/23 active prompts match raw-original bytes
+```
 
 ## Commit the generated manifest
 
@@ -40,19 +68,9 @@ git commit -m "chore(prompts): refresh prompt manifest hashes"
 
 Do not manually fill hashes.
 
-## Original-source proof
+## Literal backslash-n rule
 
-Each manifest entry includes:
-
-```text
-originalSource
-callEntry
-contextType or promptSlug
-exactMatch
-diffReason
-```
-
-`exactMatch` must stay `unknown` until an original reference hash or source file is supplied.
+Some original prompts intentionally contain literal `\\n` sequences. Do not normalize them into real line breaks unless the raw-original archive changes. Byte equality against raw-original is the only acceptance standard.
 
 ## Runtime prompt dump proof
 
@@ -101,7 +119,8 @@ Chain:
 Expected prompt file:
 Actual prompt file:
 Prompt slug/context type:
-Manifest sha256:
+Archive sha256:
+Active sha256:
 Runtime promptHash:
 Dump file:
 Observed problem:
@@ -111,7 +130,6 @@ Fix commit:
 ## Current non-pass items
 
 ```text
-manifest.json must be regenerated locally after pulling the generator.
-exactMatch remains unknown until original prompt hashes are supplied.
+src-tauri/src/llm/prompts/manifest.json must be regenerated locally after pulling the generator.
 runtime audit is not accepted until prompt_hash_index.jsonl is produced by real model calls.
 ```
