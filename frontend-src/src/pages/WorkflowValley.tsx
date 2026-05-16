@@ -14,6 +14,9 @@ import {
   Wand2,
   Loader2,
   AlertTriangle,
+  FolderKanban,
+  FileText,
+  Boxes,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTudouBridge } from "../hooks/useTudouBridge";
@@ -27,9 +30,11 @@ export default function WorkflowValley() {
     setScriptSeed,
     currentProjectId,
     setCurrentProjectId,
+    currentTaskId,
     setCurrentTaskId,
     isDoctorPanelOpen,
     setDoctorPanelOpen,
+    showToast,
   } = useAppStore();
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
@@ -37,26 +42,37 @@ export default function WorkflowValley() {
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [error, setError] = useState("");
+  const [staleProjectId, setStaleProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     setRealm("valley");
   }, [setRealm]);
 
+  const clearStaleWorkflow = (projectId: string, message: string) => {
+    setProject(null);
+    setStaleProjectId(projectId);
+    setCurrentProjectId(null);
+    setError(message);
+    showToast(message);
+  };
+
   const reloadProject = async () => {
     if (!currentProjectId) return;
+    const requestedProjectId = currentProjectId;
     setIsLoadingProject(true);
     setError("");
     try {
-      const next = await invoke<ProjectRecord | null>("screenplay/get", { projectId: currentProjectId }, { silent: true });
+      const next = await invoke<ProjectRecord | null>("screenplay/get", { projectId: requestedProjectId }, { silent: true });
       if (!next) {
-        setError("未找到该工作流项目，请从项目库重新选择。 ");
+        clearStaleWorkflow(requestedProjectId, "未找到该工作流项目。已清除失效的工作流选择，请从项目库重新选择，或继续使用已有剧本任务进入资产/Prompt 页面。");
         return;
       }
+      setStaleProjectId(null);
       setProject(next);
       const init = next.init || {};
       setScriptSeed(String(init.concept || init.name || scriptSeed || ""));
-      setCurrentProjectId(next.projectId || next.project_id || currentProjectId);
-      setCurrentTaskId(next.linkedScriptTaskId || next.linked_script_task_id || null);
+      setCurrentProjectId(next.projectId || next.project_id || requestedProjectId);
+      setCurrentTaskId(next.linkedScriptTaskId || next.linked_script_task_id || currentTaskId || null);
       const backendStep = Number(next.currentStep || next.current_step || 1);
       const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
       setCurrentStep(nextIndex);
@@ -77,13 +93,39 @@ export default function WorkflowValley() {
 
   if (!currentProjectId && !scriptSeed) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-black/20 backdrop-blur-md">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-black/20 backdrop-blur-md p-8">
         <Wand2 size={48} className="text-white/20 mb-4" />
         <h2 className="text-xl font-bold text-white mb-2">引擎缺少初始参数</h2>
-        <p className="text-white/50 mb-6 text-sm">请返回灵感枢纽输入宇宙碎片，或从项目库打开已有项目。</p>
-        <div className="flex gap-3">
+        <p className="text-white/50 mb-6 text-sm text-center">请返回灵感枢纽输入宇宙碎片，或从项目库打开已有项目。</p>
+        <div className="flex flex-wrap gap-3 justify-center">
           <button onClick={() => navigate("/")} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all">返回枢纽</button>
           <button onClick={() => navigate("/projects")} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-all">打开项目库</button>
+          {currentTaskId && <button onClick={() => navigate("/assets")} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-all">进入资产矩阵</button>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentProjectId && staleProjectId) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-black/20 backdrop-blur-md p-8">
+        <div className="max-w-3xl w-full rounded-[2rem] border border-red-500/20 bg-black/55 p-8 shadow-2xl">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/15 text-red-300 flex items-center justify-center"><AlertTriangle size={24} /></div>
+            <div>
+              <p className="eyebrow">Workflow Recovery</p>
+              <h2 className="text-2xl font-black text-white mb-2">当前工作流项目锚点已失效</h2>
+              <p className="text-white/60 text-sm leading-6">前端保存的工作流项目 ID 在当前本地项目文件目录中找不到。资产、剧本任务、Prompt 记录可能仍在 SQLite 中，不代表数据全部丢失。</p>
+            </div>
+          </div>
+          <div className="notice warn mb-6">失效 Project ID：<span className="font-mono">{staleProjectId}</span></div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <button className="btn primary justify-start" onClick={() => navigate("/projects")}><FolderKanban size={16} /> 从项目库重新选择</button>
+            <button className="btn justify-start" onClick={() => navigate("/")}><Wand2 size={16} /> 返回灵感枢纽新建项目</button>
+            <button className="btn cyan justify-start" onClick={() => navigate("/scripts")}><FileText size={16} /> 进入剧本任务页</button>
+            <button className="btn cyan justify-start" onClick={() => navigate("/assets")} disabled={!currentTaskId}><Boxes size={16} /> 使用当前剧本任务进入资产矩阵</button>
+          </div>
+          {!currentTaskId && <p className="text-white/35 text-xs mt-4">当前没有有效 script task 选择，建议先从项目库重新选择项目或进入剧本任务页。</p>}
         </div>
       </div>
     );
