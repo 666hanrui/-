@@ -42,9 +42,18 @@ fn extract_json_array(text: &str) -> Option<Vec<serde_json::Value>> {
     None
 }
 
+fn parse_asset_list(raw: &str, label: &str) -> Result<Vec<serde_json::Value>, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(vec![]);
+    }
+    serde_json::from_str::<Vec<serde_json::Value>>(trimmed)
+        .map_err(|e| format!("{} JSON 解析失败: {}", label, e))
+}
+
 fn normalize_character(raw: &serde_json::Value) -> serde_json::Value {
     json!({
-        "id": uuid(),
+        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
         "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
         "role": raw.get("role").and_then(|v| v.as_str()).unwrap_or("Unknown"),
         "aliases": raw.get("aliases").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default(),
@@ -59,7 +68,7 @@ fn normalize_character(raw: &serde_json::Value) -> serde_json::Value {
 
 fn normalize_scene(raw: &serde_json::Value) -> serde_json::Value {
     json!({
-        "id": uuid(),
+        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
         "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
         "aliases": raw.get("aliases").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default(),
         "timeOfDay": raw.get("timeOfDay").and_then(|v| v.as_str()).unwrap_or(""),
@@ -74,7 +83,7 @@ fn normalize_scene(raw: &serde_json::Value) -> serde_json::Value {
 
 fn normalize_prop(raw: &serde_json::Value) -> serde_json::Value {
     json!({
-        "id": uuid(),
+        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
         "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
         "aliases": raw.get("aliases").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default(),
         "dramaticFunction": raw.get("dramaticFunction").and_then(|v| v.as_str()).unwrap_or(""),
@@ -374,6 +383,26 @@ pub fn update_assets(
     characters: &str,
     scenes: &str,
     props: &str,
-) {
-    crate::db::crud::update_assets(conn, task_id, characters, scenes, props);
+) -> Result<serde_json::Value, String> {
+    let time = now();
+    let characters = parse_asset_list(characters, "characters")?
+        .iter()
+        .map(normalize_character)
+        .collect::<Vec<_>>();
+    let scenes = parse_asset_list(scenes, "scenes")?
+        .iter()
+        .map(normalize_scene)
+        .collect::<Vec<_>>();
+    let props = parse_asset_list(props, "props")?
+        .iter()
+        .map(normalize_prop)
+        .collect::<Vec<_>>();
+    persist_assets(conn, task_id, &characters, &scenes, &props, &time)?;
+    Ok(json!({
+        "taskId": task_id,
+        "characters": characters,
+        "scenes": scenes,
+        "props": props,
+        "savedAt": time,
+    }))
 }
