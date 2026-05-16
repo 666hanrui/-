@@ -53,6 +53,20 @@ function itemText(item: any) {
   return JSON.stringify(item, null, 2);
 }
 
+function taskMode(task: ScriptTask) {
+  const anyTask = task as any;
+  return anyTask.mode || anyTask.task?.mode || 'plot';
+}
+
+function taskStage(task: ScriptTask) {
+  const anyTask = task as any;
+  return anyTask.stage || anyTask.task?.stage || 'ready';
+}
+
+function resultSections(result: ScriptTask | any) {
+  return Array.isArray((result as any)?.sections) ? (result as any).sections : [];
+}
+
 function ReviewList({ title, items }: { title: string; items?: any[] }) {
   const rows = Array.isArray(items) ? items : [];
   return (
@@ -214,7 +228,8 @@ export default function ScriptTasksPage() {
         existingProjectId: selectedTask ? getProjectId(selectedTask) : undefined,
         existingTaskId: selectedTask ? getTaskId(selectedTask) : undefined,
       }, { timeout: 900000 });
-      const body = getScriptText(result) || (result.sections || []).map((section: any) => section.content || '').join('\n\n');
+      const sections = resultSections(result);
+      const body = getScriptText(result) || sections.map((section: any) => section.content || '').join('\n\n');
       await selectCreatedResult(result, body);
       setReview(null);
       showToast('剧本生成完成');
@@ -329,7 +344,7 @@ export default function ScriptTasksPage() {
                 {taskItems.map(({ task, taskId, title }) => (
                   <button key={taskId} onClick={() => selectTask(task)} className={`w-full text-left rounded-xl border p-3 transition-all ${selectedTaskId === taskId ? 'bg-indigo-500/20 border-indigo-500/40' : 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]'}`}>
                     <div className="flex items-center gap-2 text-sm font-bold text-white/90 min-w-0"><FileText size={15} className="shrink-0" /><span className="truncate">{title}</span></div>
-                    <div className="mt-1 text-[11px] text-white/40 font-mono truncate">{task.mode || 'plot'} · {task.stage || 'ready'} · {formatDate(getUpdatedAt(task))}</div>
+                    <div className="mt-1 text-[11px] text-white/40 font-mono truncate">{taskMode(task)} · {taskStage(task)} · {formatDate(getUpdatedAt(task))}</div>
                   </button>
                 ))}
               </div>
