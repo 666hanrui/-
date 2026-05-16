@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 type Payload = Record<string, any>;
 type WrapKind = "raw" | "payload" | "init" | "taskId" | "projectId" | "projectRename" | "scriptBody" | "authToken" | "authRefresh" | "doctor" | "updatePromptOutput";
@@ -166,9 +167,13 @@ function resolveSpec(action: string): CommandSpec {
   return COMMAND_SPECS[action] || { command: action, wrap: "raw" };
 }
 
+function isTauriRuntime() {
+  return Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+}
+
 export const useTudouBridge = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const activeRequests = useRef(new Set<string>());
+  const activeRequests = useRef(new Map<string, Promise<any>>());
 
   const invoke = useCallback(
     async <T = any>(
@@ -180,39 +185,44 @@ export const useTudouBridge = () => {
       const backendCommand = spec.command;
       const backendArgs = wrapArgs(spec.wrap, payload);
       const reqId = `${backendCommand}-${JSON.stringify(backendArgs)}`;
+      const effectiveTimeout = options.timeout ?? (backendCommand === "screenplay_get_project" ? 120000 : 30000);
 
-      if (activeRequests.current.has(reqId)) throw new Error("拦截高频重复请求");
-      activeRequests.current.add(reqId);
+      const existing = activeRequests.current.get(reqId);
+      if (existing) return existing as Promise<T>;
       if (!options.silent) setIsLoading(true);
 
-      try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`[IPC Timeout] Command ${backendCommand} 无响应`)), options.timeout)
-        );
+      const request = (async () => {
+        try {
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`[IPC Timeout] Command ${backendCommand} 无响应`)), effectiveTimeout)
+          );
 
-        const fetchPromise = (async () => {
-          const I = (window as any).__TAURI_INTERNALS__;
-          if (!I) {
-            console.warn(`[Mock IPC] ${backendCommand}`, backendArgs);
-            if (backendCommand === "auth_status") return { loggedIn: false } as any;
-            if (backendCommand === "auth_login") return { token: "mock", username: payload.username } as any;
-            if (backendCommand === "get_recent_script_tasks") return [] as any;
-            if (backendCommand === "load_script_task") return { task: payload, outputs: [] } as any;
-            if (backendCommand === "get_projects") return [] as any;
-            if (backendCommand === "screenplay_list_recent_projects") return [] as any;
-            if (backendCommand === "screenplay_create_project") return { projectId: "mock-uid-001" } as any;
-            return { success: true } as any;
-          }
-          const res = await I.invoke(backendCommand, backendArgs);
-          if (res && res.error) throw new Error(res.error);
-          return res as T;
-        })();
+          const fetchPromise = (async () => {
+            if (!isTauriRuntime()) {
+              console.warn(`[Mock IPC] ${backendCommand}`, backendArgs);
+              if (backendCommand === "auth_status") return { loggedIn: false } as any;
+              if (backendCommand === "auth_login") return { token: "mock", username: payload.username } as any;
+              if (backendCommand === "get_recent_script_tasks") return [] as any;
+              if (backendCommand === "load_script_task") return { task: payload, outputs: [] } as any;
+              if (backendCommand === "get_projects") return [] as any;
+              if (backendCommand === "screenplay_list_recent_projects") return [] as any;
+              if (backendCommand === "screenplay_create_project") return { projectId: "mock-uid-001" } as any;
+              return { success: true } as any;
+            }
+            const res = await tauriInvoke<T>(backendCommand, backendArgs);
+            if (res && typeof res === "object" && "error" in (res as any) && (res as any).error) throw new Error((res as any).error);
+            return res as T;
+          })();
 
-        return await Promise.race([fetchPromise, timeoutPromise]);
-      } finally {
-        activeRequests.current.delete(reqId);
-        if (!options.silent) setIsLoading(false);
-      }
+          return await Promise.race([fetchPromise, timeoutPromise]);
+        } finally {
+          activeRequests.current.delete(reqId);
+          if (!options.silent) setIsLoading(false);
+        }
+      })();
+
+      activeRequests.current.set(reqId, request);
+      return request;
     },
     []
   );
