@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
-import { AlertTriangle, CheckCircle2, Clapperboard, Copy, Loader2, Play, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, Boxes, CheckCircle2, Clapperboard, Copy, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Play, RefreshCw, Route, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ScriptSelector from "../components/ScriptSelector";
 import { useTudouBridge } from "../hooks/useTudouBridge";
 import { getTaskId } from "../lib/format";
@@ -42,8 +43,11 @@ function progressLine(payload: any) {
 
 export default function SeedancePage() {
   const { invoke } = useTudouBridge();
+  const navigate = useNavigate();
   const currentTaskId = useAppStore((state) => state.currentTaskId);
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
   const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
+  const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
   const setRealm = useAppStore((state) => state.setRealm);
   const showToast = useAppStore((state) => state.showToast);
 
@@ -59,6 +63,10 @@ export default function SeedancePage() {
   const selectedTaskId = useMemo(() => getTaskId(task) || currentTaskId || "", [task, currentTaskId]);
   const activeUnit = useMemo(() => units.find((unit, index) => unitIndexOf(unit, index) === activeUnitIndex) || units[0] || null, [units, activeUnitIndex]);
   const noteArea = parseNoteArea(activeUnit?.noteAreaJson || activeUnit?.note_area_json);
+  const completeUnits = useMemo(() => units.filter((unit) => ["done", "completed", "ready"].includes(unitStatus(unit))).length, [units]);
+  const pendingUnits = Math.max(0, units.length - completeUnits);
+  const analysisStatus = analysis ? "已完成" : "待分析";
+  const workStatus = busy ? `处理中：${busy}` : units.length > 0 ? `Units ${completeUnits}/${units.length}` : "待生成 Units";
 
   useEffect(() => {
     setRealm("valley");
@@ -104,10 +112,12 @@ export default function SeedancePage() {
 
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
     const taskId = getTaskId(nextTask);
+    const projectId = nextTask.projectId || nextTask.project_id || nextTask.task?.projectId || nextTask.task?.project_id || "";
     setTask(nextTask);
     setScriptText(text);
     setProgress([]);
     setError("");
+    if (projectId) setCurrentProjectId(projectId);
     if (taskId) {
       setCurrentTaskId(taskId);
       loadUnits(taskId);
@@ -195,89 +205,122 @@ export default function SeedancePage() {
   };
 
   return (
-    <div className="split">
-      <aside className="side-panel">
-        <ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} />
-        <div className="card">
-          <p className="eyebrow">Script Preview</p>
-          <div className="script-preview scroll">{scriptText || "请选择一个剧本任务。"}</div>
-        </div>
-        <div className="card">
-          <p className="eyebrow">Progress</p>
-          <pre className="json-box">{progress.length ? progress.join("\n") : "等待 seedance:progress。"}</pre>
-        </div>
-      </aside>
-
-      <main className="main-panel">
-        <div className="section-head">
-          <div><p className="eyebrow">Seedance V5</p><h2><Clapperboard size={24} /> Phase A-D / Unit E-F-G</h2></div>
-          <div className="top-actions">
-            <button className="btn" onClick={() => selectedTaskId && loadUnits(selectedTaskId)} disabled={!selectedTaskId || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}恢复</button>
-            <button className="btn primary" onClick={runAnalysis} disabled={!selectedTaskId || busy === "analysis"}>{busy === "analysis" ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}Phase A-D</button>
-            <button className="btn cyan" onClick={runAll} disabled={!selectedTaskId || units.length === 0 || busy === "all"}>{busy === "all" ? <Loader2 size={16} className="spin" /> : <Play size={16} />}全部生成</button>
-          </div>
-        </div>
-
-        {!selectedTaskId && <div className="notice warn">请选择 script task。Seedance V5 以 script task 作为恢复主键。</div>}
-        {error && <div className="error"><AlertTriangle size={16} /> {error}</div>}
-
-        <div className="grid two">
-          <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Layer 1</p><h3>Phase A-D 分析</h3></div>{analysis && <span className="tag"><CheckCircle2 size={14} /> ready</span>}</div>
-            <div className="grid two mb-4">
-              <div className="notice">总时长：{analysis?.totalSec || analysis?.total_sec || "N/A"}</div>
-              <div className="notice">单元数：{analysis?.totalUnits || analysis?.total_units || units.length || "N/A"}</div>
-            </div>
-            <pre className="json-box">{analysis ? JSON.stringify(analysis, null, 2) : "等待 A-D 分析结果。"}</pre>
-          </section>
-
-          <section className="card">
-            <p className="eyebrow">Layer 2</p>
-            <h3>Unit E/F/G 列表</h3>
-            <div className="table-list mt-4">
-              {busy === "load" && <div className="notice"><Loader2 size={14} className="spin" /> 正在读取...</div>}
-              {units.length === 0 && <div className="empty">完成 A-D 分析后会出现 seedance_units。</div>}
-              {units.map((unit, index) => {
-                const unitIndex = unitIndexOf(unit, index);
-                const status = unitStatus(unit);
-                return (
-                  <button key={unit.id || unitIndex} className={`row-card select-row ${activeUnitIndex === unitIndex ? "active" : ""}`} onClick={() => setActiveUnitIndex(unitIndex)}>
-                    <span>
-                      <span className="row-title">Unit {unitIndex + 1} · {unit.sceneType || unit.scene_type || "scene"}</span>
-                      <span className="row-meta">{status} · {unit.durationSec || unit.duration_sec || "?"}s · shots {unit.subShotCount || unit.sub_shot_count || "?"}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-
+    <div className="w-full h-full overflow-y-auto custom-scrollbar p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         <section className="card">
           <div className="section-head">
-            <div><p className="eyebrow">Unit Detail</p><h3>Unit {activeUnit ? activeUnitIndex + 1 : "-"} 生成结果</h3></div>
-            <div className="top-actions">
-              <button className="btn" onClick={refreshCurrentUnit} disabled={!selectedTaskId || !activeUnit || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}刷新单元</button>
-              <button className="btn primary" onClick={() => runUnit(activeUnitIndex)} disabled={!selectedTaskId || !activeUnit || busy === "unit"}>{busy === "unit" ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}生成当前单元</button>
+            <div>
+              <p className="eyebrow">Seedance Recovery Console</p>
+              <h2><Clapperboard size={24} /> Seedance V5 / 验收工作台</h2>
+              <p className="row-meta mt-1">{workStatus}</p>
+            </div>
+            <div className="top-actions flex-wrap">
+              <button className="btn ghost" onClick={() => navigate("/projects")}><FolderKanban size={16} /> 项目库</button>
+              <button className="btn ghost" onClick={() => navigate("/scripts")}><FileText size={16} /> 剧本</button>
+              <button className="btn ghost" onClick={() => navigate("/assets")} disabled={!selectedTaskId}><Boxes size={16} /> 资产</button>
+              <button className="btn ghost" onClick={() => navigate("/image")} disabled={!selectedTaskId}><ImageIcon size={16} /> 图像</button>
+              <button className="btn ghost" onClick={() => navigate("/video")} disabled={!selectedTaskId}><Film size={16} /> 视频</button>
             </div>
           </div>
-          {!activeUnit ? <div className="empty">请选择一个 Unit。</div> : <div className="grid two">
-            <div>
-              <div className="grid two mb-4">
-                <div className="notice">status：{unitStatus(activeUnit)}</div>
-                <div className="notice">retry：{activeUnit.retryCount ?? activeUnit.retry_count ?? 0}</div>
-              </div>
-              {(activeUnit.errorMessage || activeUnit.error_message) && <div className="error">{activeUnit.errorMessage || activeUnit.error_message}</div>}
-              <p className="eyebrow mt-4">copyArea</p>
-              <pre className="json-box">{activeUnit.copyArea || activeUnit.copy_area || "尚未生成 copyArea。"}</pre>
-            </div>
-            <div>
-              <p className="eyebrow">noteAreaJson</p>
-              <pre className="json-box">{noteArea ? JSON.stringify(noteArea, null, 2) : "尚未生成 noteAreaJson。"}</pre>
-            </div>
-          </div>}
+          <div className="grid md:grid-cols-4 gap-3 mt-4">
+            <InfoCard label="Project" value={currentProjectId || "未绑定"} />
+            <InfoCard label="Script Task" value={selectedTaskId || "未选择"} />
+            <InfoCard label="A-D 分析" value={analysisStatus} />
+            <InfoCard label="Units" value={`${completeUnits}/${units.length} done · ${pendingUnits} pending`} />
+          </div>
+          <div className="notice mt-4"><Route size={15} /> Seedance 固定两层：Phase A-D 分析 → Unit E/F/G 生成。当前页面监听 seedance:progress，并以 script task 作为恢复主键。</div>
+          {!selectedTaskId && <div className="notice warn mt-4">请选择 script task。Seedance V5 以 script task 作为恢复主键。</div>}
+          {error && <div className="error mt-4"><AlertTriangle size={16} /> {error}</div>}
         </section>
-      </main>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
+          <aside className="space-y-6">
+            <ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} />
+            <div className="card">
+              <p className="eyebrow">Script Preview</p>
+              <div className="script-preview scroll">{scriptText || "请选择一个剧本任务。"}</div>
+            </div>
+            <div className="card">
+              <p className="eyebrow">Progress</p>
+              <pre className="json-box">{progress.length ? progress.join("\n") : "等待 seedance:progress。"}</pre>
+            </div>
+          </aside>
+
+          <main className="space-y-6">
+            <section className="card">
+              <div className="section-head">
+                <div><p className="eyebrow">Generation Controls</p><h3>Phase A-D / Unit E-F-G</h3></div>
+                <div className="top-actions flex-wrap">
+                  <button className="btn" onClick={() => selectedTaskId && loadUnits(selectedTaskId)} disabled={!selectedTaskId || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 恢复</button>
+                  <button className="btn primary" onClick={runAnalysis} disabled={!selectedTaskId || busy === "analysis"}>{busy === "analysis" ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />} Phase A-D</button>
+                  <button className="btn cyan" onClick={runAll} disabled={!selectedTaskId || units.length === 0 || busy === "all"}>{busy === "all" ? <Loader2 size={16} className="spin" /> : <Play size={16} />} 全部生成</button>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid two">
+              <section className="card">
+                <div className="section-head"><div><p className="eyebrow">Layer 1</p><h3>Phase A-D 分析</h3></div>{analysis && <span className="tag"><CheckCircle2 size={14} /> ready</span>}</div>
+                <div className="grid two mb-4">
+                  <div className="notice">总时长：{analysis?.totalSec || analysis?.total_sec || "N/A"}</div>
+                  <div className="notice">单元数：{analysis?.totalUnits || analysis?.total_units || units.length || "N/A"}</div>
+                </div>
+                <pre className="json-box">{analysis ? JSON.stringify(analysis, null, 2) : "等待 A-D 分析结果。"}</pre>
+              </section>
+
+              <section className="card">
+                <p className="eyebrow">Layer 2</p>
+                <h3>Unit E/F/G 列表</h3>
+                <div className="table-list mt-4">
+                  {busy === "load" && <div className="notice"><Loader2 size={14} className="spin" /> 正在读取...</div>}
+                  {units.length === 0 && <div className="empty">完成 A-D 分析后会出现 seedance_units。</div>}
+                  {units.map((unit, index) => {
+                    const unitIndex = unitIndexOf(unit, index);
+                    const status = unitStatus(unit);
+                    return (
+                      <button key={unit.id || unitIndex} className={`row-card select-row ${activeUnitIndex === unitIndex ? "active" : ""}`} onClick={() => setActiveUnitIndex(unitIndex)}>
+                        <span>
+                          <span className="row-title">Unit {unitIndex + 1} · {unit.sceneType || unit.scene_type || "scene"}</span>
+                          <span className="row-meta">{status} · {unit.durationSec || unit.duration_sec || "?"}s · shots {unit.subShotCount || unit.sub_shot_count || "?"}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <section className="card">
+              <div className="section-head">
+                <div><p className="eyebrow">Unit Detail</p><h3>Unit {activeUnit ? activeUnitIndex + 1 : "-"} 生成结果</h3></div>
+                <div className="top-actions">
+                  <button className="btn" onClick={refreshCurrentUnit} disabled={!selectedTaskId || !activeUnit || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 刷新单元</button>
+                  <button className="btn primary" onClick={() => runUnit(activeUnitIndex)} disabled={!selectedTaskId || !activeUnit || busy === "unit"}>{busy === "unit" ? <Loader2 size={16} className="spin" /> : <Copy size={16} />} 生成当前单元</button>
+                </div>
+              </div>
+              {!activeUnit ? <div className="empty">请选择一个 Unit。</div> : <div className="grid two">
+                <div>
+                  <div className="grid two mb-4">
+                    <div className="notice">status：{unitStatus(activeUnit)}</div>
+                    <div className="notice">retry：{activeUnit.retryCount ?? activeUnit.retry_count ?? 0}</div>
+                  </div>
+                  {(activeUnit.errorMessage || activeUnit.error_message) && <div className="error">{activeUnit.errorMessage || activeUnit.error_message}</div>}
+                  <p className="eyebrow mt-4">copyArea</p>
+                  <pre className="json-box">{activeUnit.copyArea || activeUnit.copy_area || "尚未生成 copyArea。"}</pre>
+                </div>
+                <div>
+                  <p className="eyebrow">noteAreaJson</p>
+                  <pre className="json-box">{noteArea ? JSON.stringify(noteArea, null, 2) : "尚未生成 noteAreaJson。"}</pre>
+                </div>
+              </div>}
+            </section>
+          </main>
+        </div>
+      </div>
     </div>
   );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 min-w-0"><div className="text-white/35 text-[10px] uppercase tracking-[0.18em] mb-1">{label}</div><div className="text-white/85 text-xs font-mono truncate" title={value}>{value}</div></div>;
 }
