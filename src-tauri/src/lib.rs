@@ -70,7 +70,6 @@ mod cmd {
         let mode = payload["mode"].as_str().unwrap_or("openai");
 
         if test_type == "image" {
-            // Image endpoints use openai-compatible format
             let start = std::time::Instant::now();
             let url = format!("{}/images/generations", endpoint.trim_end_matches('/'));
             let client = reqwest::Client::builder()
@@ -337,10 +336,11 @@ mod cmd {
             "asset:scan-start",
             serde_json::json!({ "taskId": task_id, "stage": "start" }),
         ).ok();
-        let result = {
+        let extraction_future = {
             let conn = state.lock().map_err(|e| e.to_string())?;
-            crate::services::asset_extraction::run_asset_extraction(&conn, &task_id).await
+            crate::services::asset_extraction::run_asset_extraction(&conn, &task_id)
         };
+        let result = extraction_future.await;
         match result {
             Ok(result) => {
                 let characters = result["characters"].as_array().map(|v| v.len()).unwrap_or(0);
@@ -929,8 +929,6 @@ mod cmd {
         screenplay::generate_checkpoint_async(settings_json, &pid, &trigger).await
     }
 
-    // ── Doctor Diagnose (AI 医生自由问答) ──
-
     #[tauri::command]
     pub async fn doctor_diagnose(
         app: AppHandle,
@@ -959,11 +957,9 @@ mod cmd {
             return Err("API 未配置, 请先到设置页填写文字模型 API 地址和密钥.".into());
         }
 
-        // Load project context
         let rec = services::screenplay_store::load_project(&project_id)
             .ok_or("Project not found")?;
-        let project_snapshot =
-            services::screenplay_store::build_project_snapshot(&project_id);
+        let project_snapshot = services::screenplay_store::build_project_snapshot(&project_id);
 
         let context_params = serde_json::json!({
             "init": rec.init,
@@ -993,8 +989,6 @@ mod cmd {
 
         Ok(full_text.trim().to_string())
     }
-
-    // ── File dialogs ──
 
     #[tauri::command]
     pub fn select_text_file() -> serde_json::Value {
@@ -1028,7 +1022,6 @@ pub fn run() {
             let conn = db::init_database(&db_path).expect("failed to initialize database");
             app.manage(Mutex::new(conn));
 
-            // Initialize screenplay projects directory
             let app_data = app
                 .path()
                 .app_data_dir()
