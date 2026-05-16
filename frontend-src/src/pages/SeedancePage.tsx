@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { AlertTriangle, Boxes, CheckCircle2, Clapperboard, Copy, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Play, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, Clapperboard, Copy, FileText, Film, FolderKanban, Image as ImageIcon, Play, RefreshCw, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
@@ -34,6 +34,11 @@ function parseNoteArea(value: any) {
 
 function taskIdOfPayload(payload: any) {
   return payload?.taskId || payload?.task_id || '';
+}
+
+function projectIdOfTask(task: ScriptTask) {
+  const anyTask = task as any;
+  return anyTask.projectId || anyTask.project_id || anyTask.task?.projectId || anyTask.task?.project_id || '';
 }
 
 function progressLine(payload: any) {
@@ -98,7 +103,7 @@ export default function SeedancePage() {
       const rows = await invoke<any[]>('seedance/list-units', { taskId }, { silent: true });
       const list = Array.isArray(rows) ? rows : [];
       setUnits(list);
-      if (list.length > 0) setActiveUnitIndex(unitIndexOf(list[0], 0));
+      setActiveUnitIndex(list.length > 0 ? unitIndexOf(list[0], 0) : 0);
       const cached = await invoke<any>('seedance/get-analysis', { taskId }, { silent: true }).catch(() => null);
       setAnalysis(cached);
     } catch (err: any) {
@@ -110,7 +115,7 @@ export default function SeedancePage() {
 
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
     const taskId = getTaskId(nextTask);
-    const projectId = nextTask.projectId || nextTask.project_id || nextTask.task?.projectId || nextTask.task?.project_id || '';
+    const projectId = projectIdOfTask(nextTask);
     setTask(nextTask);
     setScriptText(text);
     setProgress([]);
