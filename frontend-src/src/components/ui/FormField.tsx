@@ -17,10 +17,14 @@ export default function FormField({ label, helperText, children, className = '' 
   );
 }
 
-export function TextInput({ value, onChange, placeholder, type = 'text', disabled, ...rest }: any) {
+export const TextInput = React.forwardRef<HTMLInputElement, any>(function TextInput(
+  { value, onChange, placeholder, type = 'text', disabled, ...rest },
+  ref
+) {
   return (
     <input
       {...rest}
+      ref={ref}
       type={type}
       value={value}
       onChange={onChange}
@@ -29,12 +33,16 @@ export function TextInput({ value, onChange, placeholder, type = 'text', disable
       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white/90 text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-mono disabled:opacity-50"
     />
   );
-}
+});
 
-export function TextArea({ value, onChange, placeholder, disabled, rows = 4, ...rest }: any) {
+export const TextArea = React.forwardRef<HTMLTextAreaElement, any>(function TextArea(
+  { value, onChange, placeholder, disabled, rows = 4, ...rest },
+  ref
+) {
   return (
     <textarea
       {...rest}
+      ref={ref}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
@@ -43,4 +51,4 @@ export function TextArea({ value, onChange, placeholder, disabled, rows = 4, ...
       className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white/90 text-sm focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all font-serif resize-y custom-scrollbar disabled:opacity-50"
     />
   );
-}
+});
