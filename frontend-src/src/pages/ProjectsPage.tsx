@@ -90,22 +90,22 @@ export default function ProjectsPage() {
     };
   };
 
-  const normalizeScreenplayProject = async (summary: any): Promise<ArchiveProject | null> => {
+  const normalizeScreenplayProject = (summary: any): ArchiveProject | null => {
     const projectId = summary.projectId || summary.project_id || summary.id;
     if (!projectId) return null;
-    const detail = await invoke<any>("screenplay/get", { projectId }, { silent: true }).catch(() => null);
-    const init = detail?.init || summary.init || {};
-    const linkedTaskId = detail?.linkedScriptTaskId || detail?.linked_script_task_id;
+    const init = summary.init || {};
+    const linkedTaskId = summary.linkedScriptTaskId || summary.linked_script_task_id;
+    const currentStep = summary.currentStep || summary.current_step;
     return {
       projectId,
-      projectName: init.name || summary.name || init.concept || projectId,
+      projectName: init.name || summary.name || init.concept || summary.concept || projectId,
       moduleType: "workflow",
-      status: detail ? `step-${detail.currentStep || detail.current_step || 1}` : "workflow",
-      latestDate: detail?.updatedAt || detail?.updated_at || summary.updatedAt || summary.updated_at,
+      status: currentStep ? `step-${currentStep}` : "workflow",
+      latestDate: summary.updatedAt || summary.updated_at,
       taskCount: linkedTaskId ? 1 : 0,
-      tasks: linkedTaskId ? [{ taskId: linkedTaskId, moduleType: "script", stage: "workflow-finalized", mode: "workflow", updatedAt: detail.updatedAt || detail.updated_at }] : [],
+      tasks: linkedTaskId ? [{ taskId: linkedTaskId, moduleType: "script", stage: "workflow-finalized", mode: "workflow", updatedAt: summary.updatedAt || summary.updated_at }] : [],
       source: "screenplay",
-      raw: detail || summary,
+      raw: summary,
     };
   };
 
@@ -118,10 +118,10 @@ export default function ProjectsPage() {
         invoke<any[]>("screenplay/list-recent", { limit: 50 }, { silent: true }).catch(() => []),
       ]);
       const sqliteProjects = Array.isArray(sqliteRows) ? sqliteRows.map(normalizeSqliteProject) : [];
-      const screenplayProjects = await Promise.all((Array.isArray(screenplayRows) ? screenplayRows : []).map(normalizeScreenplayProject));
+      const screenplayProjects = (Array.isArray(screenplayRows) ? screenplayRows : []).map(normalizeScreenplayProject).filter(Boolean) as ArchiveProject[];
       const merged = new Map<string, ArchiveProject>();
       for (const item of sqliteProjects) if (item.projectId) merged.set(`sqlite:${item.projectId}`, item);
-      for (const item of screenplayProjects) if (item?.projectId) merged.set(`screenplay:${item.projectId}`, item);
+      for (const item of screenplayProjects) if (item.projectId) merged.set(`screenplay:${item.projectId}`, item);
       setProjects([...merged.values()]);
     } catch (err: any) {
       setError(err.message || "读取项目库失败");
@@ -134,7 +134,7 @@ export default function ProjectsPage() {
     setCurrentProjectId(project.projectId);
     setCurrentTaskId(null);
     const init = project.raw?.init || {};
-    setScriptSeed(init.concept || project.projectName || "");
+    setScriptSeed(init.concept || project.raw?.concept || project.projectName || "");
     setCurrentStep(Math.max(0, Number(project.raw?.currentStep || project.raw?.current_step || 1) - 1));
     navigate(PAGE_PATH.workflow);
   };
