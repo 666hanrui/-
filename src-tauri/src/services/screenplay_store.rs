@@ -20,6 +20,10 @@ fn project_file(project_id: &str) -> PathBuf {
     projects_dir().join(format!("{}.json", project_id))
 }
 
+fn truncate_chars(input: &str, max_chars: usize) -> String {
+    input.chars().take(max_chars).collect()
+}
+
 fn new_project_id() -> String {
     use rand::Rng;
     format!("sp_{:012x}", rand::thread_rng().gen::<u64>())
@@ -138,7 +142,7 @@ impl ProjectRecord {
                 effective_init
                     .concept
                     .as_ref()
-                    .map(|c| c.chars().take(30).collect::<String>())
+                    .map(|c| truncate_chars(c, 30))
             })
             .or_else(|| Some("未命名剧本".into()));
 
@@ -212,7 +216,7 @@ impl ProjectRecord {
                             "projectId": project_id,
                             "updatedAt": updated_at,
                             "name": name,
-                            "concept": concept.map(|s| s.chars().take(40).collect::<String>()),
+                            "concept": concept.map(|s| truncate_chars(s, 40)),
                         }));
                     }
                 }
@@ -340,11 +344,7 @@ pub fn get_active_version(project_id: &str, step_number: u8) -> Option<VersionEn
     let rec = load_project(project_id)?;
     let bucket = rec.steps.get(&step_number.to_string())?;
     let active = bucket.versions.iter().find(|v| v.is_active);
-    Some(
-        active
-            .cloned()
-            .unwrap_or_else(|| bucket.versions.last().cloned().unwrap()),
-    )
+    Some(active.cloned().unwrap_or_else(|| bucket.versions.last().cloned().unwrap()))
 }
 
 pub fn list_versions(project_id: &str, step_number: u8) -> Vec<VersionEntry> {
@@ -385,8 +385,7 @@ pub fn save_checkpoint(project_id: &str, trigger: &str, content: &str) -> bool {
         Some(r) => r,
         None => return false,
     };
-    rec.checkpoints
-        .insert(trigger.to_string(), content.to_string());
+    rec.checkpoints.insert(trigger.to_string(), content.to_string());
     rec.save();
     true
 }
@@ -410,8 +409,15 @@ pub fn build_project_snapshot(project_id: &str) -> serde_json::Value {
     let mut steps = serde_json::json!({});
     for n in 1..=8 {
         if let Some(version) = get_active_version(project_id, n) {
-            if version.structured.is_some() {
-                steps[&n.to_string()] = serde_json::json!({"structured": version.structured});
+            let mut step_value = serde_json::json!({});
+            if let Some(structured) = version.structured {
+                step_value["structured"] = structured;
+            }
+            if let Some(output) = version.output.as_deref() {
+                step_value["outputPreview"] = serde_json::Value::String(truncate_chars(output, 3000));
+            }
+            if step_value.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+                steps[&n.to_string()] = step_value;
             }
         }
     }
@@ -419,7 +425,7 @@ pub fn build_project_snapshot(project_id: &str) -> serde_json::Value {
     let ckpt = rec
         .checkpoints
         .get("after-step-6")
-        .cloned()
+        .map(|s| truncate_chars(s, 3000))
         .unwrap_or_default();
     let mut checkpoints = serde_json::json!({});
     if !ckpt.is_empty() {
