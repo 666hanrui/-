@@ -1,4 +1,4 @@
-import { Boxes, Edit3, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Save, Trash2, Workflow, X, FileText, Clapperboard } from "lucide-react";
+import { Boxes, Edit3, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Save, Trash2, Workflow, X, FileText, Clapperboard, Route } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTudouBridge } from "../hooks/useTudouBridge";
@@ -48,6 +48,11 @@ function moduleIcon(moduleType: string) {
   if (moduleType === "seedance") return Clapperboard;
   if (moduleType === "asset" || moduleType === "assets") return Boxes;
   return FileText;
+}
+
+function primaryScriptTask(project: ArchiveProject) {
+  const tasks = Array.isArray(project.tasks) ? project.tasks : [];
+  return tasks.find((task) => taskIdOf(task) && (task.moduleType || task.module_type || "script") === "script") || tasks.find((task) => taskIdOf(task)) || null;
 }
 
 export default function ProjectsPage() {
@@ -100,7 +105,7 @@ export default function ProjectsPage() {
       projectId,
       projectName: init.name || summary.name || init.concept || summary.concept || projectId,
       moduleType: "workflow",
-      status: currentStep ? `step-${currentStep}` : "workflow",
+      status: currentStep ? `workflow step-${currentStep}` : "workflow",
       latestDate: summary.updatedAt || summary.updated_at,
       taskCount: linkedTaskId ? 1 : 0,
       tasks: linkedTaskId ? [{ taskId: linkedTaskId, moduleType: "script", stage: "workflow-finalized", mode: "workflow", updatedAt: summary.updatedAt || summary.updated_at }] : [],
@@ -132,7 +137,8 @@ export default function ProjectsPage() {
 
   const openWorkflowProject = (project: ArchiveProject) => {
     setCurrentProjectId(project.projectId);
-    setCurrentTaskId(null);
+    const task = primaryScriptTask(project);
+    setCurrentTaskId(task ? taskIdOf(task) : null);
     const init = project.raw?.init || {};
     setScriptSeed(init.concept || project.raw?.concept || project.projectName || "");
     setCurrentStep(Math.max(0, Number(project.raw?.currentStep || project.raw?.current_step || 1) - 1));
@@ -140,10 +146,27 @@ export default function ProjectsPage() {
   };
 
   const openTask = (project: ArchiveProject, task: any, page: PageId) => {
-    setCurrentProjectId(project.projectId || null);
+    setCurrentProjectId(project.source === "screenplay" ? project.projectId : project.projectId || null);
     const taskId = taskIdOf(task);
     if (taskId) setCurrentTaskId(taskId);
+    const init = project.raw?.init || {};
+    setScriptSeed(init.concept || project.raw?.concept || project.projectName || "");
     navigate(PAGE_PATH[page]);
+  };
+
+  const openPrimaryScript = (project: ArchiveProject, page: PageId) => {
+    const task = primaryScriptTask(project);
+    if (!task) {
+      if (page === "scripts") {
+        setCurrentProjectId(project.projectId || null);
+        setCurrentTaskId(null);
+        navigate(PAGE_PATH.scripts);
+        return;
+      }
+      showToast("该项目还没有可承接的 script task，请先进入工作流 finalize，或进入剧本任务页导入/生成剧本。 ");
+      return;
+    }
+    openTask(project, task, page);
   };
 
   const startRename = (project: ArchiveProject) => {
@@ -191,20 +214,26 @@ export default function ProjectsPage() {
     <div className="main-panel">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Local Archive</p>
-          <h2><FolderKanban size={24} /> 项目库</h2>
+          <p className="eyebrow">Recovery Console</p>
+          <h2><FolderKanban size={24} /> 项目库 / 恢复入口</h2>
         </div>
         <button className="btn" onClick={loadProjects} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}刷新</button>
       </div>
 
+      <div className="notice">
+        <Route size={15} /> 按固定链路恢复：Workflow 项目 → Script Task → Assets → Image/Video Prompt → Seedance。优先从这里进入各阶段，避免 stale localStorage 指向失效项目。
+      </div>
+
       {error && <div className="error">{error}</div>}
-      {sortedProjects.length === 0 && <div className="empty">本地项目库暂无记录。</div>}
+      {sortedProjects.length === 0 && <div className="empty">本地项目库暂无记录。可以返回灵感枢纽新建工作流，或进入剧本任务页导入已有剧本。</div>}
 
       <div className="project-grid">
         {sortedProjects.map((project) => {
           const editKey = `${project.source}:${project.projectId}`;
           const isEditing = editingId === editKey;
           const tasks = Array.isArray(project.tasks) ? project.tasks : [];
+          const linkedTask = primaryScriptTask(project);
+          const linkedTaskId = linkedTask ? taskIdOf(linkedTask) : "";
           const deleting = busy === `delete:${project.projectId}`;
           const renaming = busy === `rename:${project.projectId}`;
 
@@ -222,10 +251,22 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              <div className="notice">链路：工作流项目 → 剧本任务 → 资产矩阵 → Prompt 输出 → Seedance Units</div>
+              <div className="notice">
+                <div>Project ID：<span className="font-mono">{project.projectId}</span></div>
+                <div>Script Task：<span className="font-mono">{linkedTaskId || "尚未绑定"}</span></div>
+              </div>
+
+              <div className="top-actions mt-4 flex-wrap">
+                {project.source === "screenplay" && <button className="btn primary" onClick={() => openWorkflowProject(project)}><Workflow size={16} /> 工作流</button>}
+                <button className="btn" onClick={() => openPrimaryScript(project, "scripts")}><FileText size={16} /> 剧本</button>
+                <button className="btn" onClick={() => openPrimaryScript(project, "assets")} disabled={!linkedTask}><Boxes size={16} /> 资产</button>
+                <button className="btn" onClick={() => openPrimaryScript(project, "image")} disabled={!linkedTask}><ImageIcon size={16} /> 图像</button>
+                <button className="btn" onClick={() => openPrimaryScript(project, "video")} disabled={!linkedTask}><Film size={16} /> 视频</button>
+                <button className="btn" onClick={() => openPrimaryScript(project, "seedance")} disabled={!linkedTask}><Clapperboard size={16} /> Seedance</button>
+              </div>
+
               <div className="table-list mt-4">
-                {project.source === "screenplay" && <button className="row-card" onClick={() => openWorkflowProject(project)}><span><span className="row-title"><Workflow size={15} /> 打开工作流项目</span><span className="row-meta">恢复 currentProjectId / currentStep / concept</span></span></button>}
-                {tasks.length === 0 && project.source !== "screenplay" && <button className="row-card" onClick={() => openTask(project, null, "scripts")}><span><span className="row-title"><FileText size={15} /> 打开剧本任务入口</span><span className="row-meta">无 task 明细时进入 /scripts 统一入口</span></span></button>}
+                {tasks.length === 0 && <div className="row-card"><span><span className="row-title"><FileText size={15} /> 暂无 script task</span><span className="row-meta">先完成 workflow finalize，或进入剧本页导入/生成剧本。</span></span></div>}
                 {tasks.map((task: any) => {
                   const moduleType = task.moduleType || task.module_type || "script";
                   const page = modulePage(moduleType);
