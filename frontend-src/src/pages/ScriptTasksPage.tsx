@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Boxes, FileText, Film, Image as ImageIcon, Loader2, RefreshCw, Save, SearchCheck, Upload, Wand2 } from "lucide-react";
+import { Boxes, CheckCircle2, FileText, Film, Image as ImageIcon, Loader2, RefreshCw, Save, SearchCheck, Upload, Wand2 } from "lucide-react";
 import { useTudouBridge } from "../hooks/useTudouBridge";
 import { formatDate, getProjectId, getProjectName, getScriptText, getTaskId, getUpdatedAt } from "../lib/format";
 import { useAppStore } from "../store/useAppStore";
@@ -12,7 +12,9 @@ function parseList(value: any): any[] {
   if (typeof value !== "string") return [value];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [parsed];
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") return Object.entries(parsed).map(([key, val]) => ({ key, value: val }));
+    return [parsed];
   } catch {
     return value.trim() ? [value] : [];
   }
@@ -36,10 +38,29 @@ function resultProjectId(result: any) {
   return result?.projectId || result?.project_id || "";
 }
 
+function itemText(item: any) {
+  if (typeof item === "string") return item;
+  if (item?.key) return `${item.key}: ${typeof item.value === "string" ? item.value : JSON.stringify(item.value)}`;
+  if (item?.title && item?.content) return `${item.title}: ${item.content}`;
+  if (item?.name && item?.score !== undefined) return `${item.name}: ${item.score} ${item.comment || item.reason || ""}`;
+  return JSON.stringify(item, null, 2);
+}
+
+function ReviewList({ title, items }: { title: string; items?: any[] }) {
+  const rows = Array.isArray(items) ? items : [];
+  return (
+    <div className="card inner">
+      <p className="eyebrow">{title}</p>
+      {rows.length === 0 ? <div className="empty">暂无内容</div> : <div className="space-y-2">{rows.map((item, index) => <div key={index} className="notice">{itemText(item)}</div>)}</div>}
+    </div>
+  );
+}
+
 export default function ScriptTasksPage() {
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
   const setRealm = useAppStore((state) => state.setRealm);
+  const currentTaskId = useAppStore((state) => state.currentTaskId);
   const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
   const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
   const showToast = useAppStore((state) => state.showToast);
@@ -56,21 +77,40 @@ export default function ScriptTasksPage() {
   const [genre, setGenre] = useState("短剧 / 反转 / 情绪冲突");
   const [style, setStyle] = useState("强钩子、快节奏、适合短视频连续剧");
   const [duration, setDuration] = useState("2分钟");
+  const [audience, setAudience] = useState("短视频观众");
+  const [tone, setTone] = useState("强冲突、强反转、强情绪");
+  const [ending, setEnding] = useState("结尾反转并留下下一集钩子");
+  const [outputMode, setOutputMode] = useState("full_script");
+  const [episodes, setEpisodes] = useState("1");
+  const [customStyle, setCustomStyle] = useState("");
   const [importBody, setImportBody] = useState("");
-
-  useEffect(() => {
-    setRealm("valley");
-    loadTasks();
-  }, [setRealm]);
 
   const selectedTaskId = getTaskId(selectedTask);
 
-  async function loadTasks() {
+  useEffect(() => {
+    setRealm("valley");
+    loadTasks(currentTaskId || undefined);
+  }, [setRealm]);
+
+  useEffect(() => {
+    if (currentTaskId && currentTaskId !== selectedTaskId) {
+      const hit = tasks.find((task) => getTaskId(task) === currentTaskId);
+      if (hit) selectTask(hit);
+    }
+  }, [currentTaskId, tasks.length]);
+
+  async function loadTasks(selectId?: string) {
     setBusy("load");
     setError("");
     try {
       const rows = await invoke<ScriptTask[]>("script/recent", {}, { silent: true });
-      setTasks(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setTasks(list);
+      const targetId = selectId || currentTaskId || "";
+      if (targetId) {
+        const hit = list.find((item) => getTaskId(item) === targetId);
+        if (hit) await selectTask(hit);
+      }
     } catch (err: any) {
       setError(err.message || "读取剧本任务失败");
     } finally {
@@ -99,14 +139,25 @@ export default function ScriptTasksPage() {
     }
   }
 
+  async function selectCreatedResult(result: ScriptTask | any, fallbackBody = "") {
+    const taskId = resultTaskId(result) || getTaskId(result);
+    const projectId = resultProjectId(result) || getProjectId(result);
+    if (taskId) setCurrentTaskId(taskId);
+    if (projectId) setCurrentProjectId(projectId);
+    await loadTasks(taskId);
+    if (taskId) {
+      setSelectedTask(result);
+      setScriptBody(getScriptText(result) || fallbackBody);
+    }
+  }
+
   async function saveDraft() {
     setBusy("draft");
+    setError("");
     try {
       const result = await invoke<any>("script/save-draft", { mode, input_summary: inputSummary, genre, style, duration });
-      if (resultTaskId(result)) setCurrentTaskId(resultTaskId(result));
-      if (resultProjectId(result)) setCurrentProjectId(resultProjectId(result));
+      await selectCreatedResult(result);
       showToast("剧本草稿已保存");
-      await loadTasks();
     } catch (err: any) {
       setError(err.message || "保存草稿失败");
     } finally {
@@ -125,16 +176,19 @@ export default function ScriptTasksPage() {
         inputSummary,
         stylePreset: style,
         genres: genre,
+        audience,
+        tone,
+        ending,
+        outputMode,
+        episodes,
+        customStyle,
         existingProjectId: selectedTask ? getProjectId(selectedTask) : undefined,
         existingTaskId: selectedTask ? getTaskId(selectedTask) : undefined,
       }, { timeout: 900000 });
-      if (resultTaskId(result)) setCurrentTaskId(resultTaskId(result));
-      if (resultProjectId(result)) setCurrentProjectId(resultProjectId(result));
-      setSelectedTask(result);
-      setScriptBody(getScriptText(result) || (result.sections || []).map((s: any) => s.content || "").join("\n\n"));
+      const body = getScriptText(result) || (result.sections || []).map((s: any) => s.content || "").join("\n\n");
+      await selectCreatedResult(result, body);
       setReview(null);
       showToast("剧本生成完成");
-      await loadTasks();
     } catch (err: any) {
       setError(err.message || "生成剧本失败");
     } finally {
@@ -148,14 +202,10 @@ export default function ScriptTasksPage() {
     setError("");
     try {
       const result = await invoke<ScriptTask>("script/import", { script_body: importBody, input_summary: inputSummary || importBody.slice(0, 180), duration });
-      if (resultTaskId(result)) setCurrentTaskId(resultTaskId(result));
-      if (resultProjectId(result)) setCurrentProjectId(resultProjectId(result));
-      setSelectedTask(result);
-      setScriptBody(getScriptText(result) || importBody);
+      await selectCreatedResult(result, getScriptText(result) || importBody);
       setReview(null);
       setImportBody("");
       showToast("剧本已导入");
-      await loadTasks();
     } catch (err: any) {
       setError(err.message || "导入剧本失败");
     } finally {
@@ -166,10 +216,11 @@ export default function ScriptTasksPage() {
   async function saveBody() {
     if (!selectedTaskId) return;
     setBusy("save");
+    setError("");
     try {
-      await invoke("script/update-body", { task_id: selectedTaskId, new_body: scriptBody }, { silent: true });
+      await invoke("script/update-body", { taskId: selectedTaskId, newBody: scriptBody }, { silent: true });
       showToast("剧本正文已保存");
-      await loadTasks();
+      await loadTasks(selectedTaskId);
     } catch (err: any) {
       setError(err.message || "保存正文失败");
     } finally {
@@ -182,11 +233,11 @@ export default function ScriptTasksPage() {
     setBusy("review");
     setError("");
     try {
-      await invoke("script/update-body", { task_id: selectedTaskId, new_body: scriptBody }, { silent: true });
-      const result = await invoke<ReviewResult>("script/review", { taskId: selectedTaskId, task_id: selectedTaskId }, { timeout: 900000 });
+      await invoke("script/update-body", { taskId: selectedTaskId, newBody: scriptBody }, { silent: true });
+      const result = await invoke<ReviewResult>("script/review", { taskId: selectedTaskId }, { timeout: 900000 });
       setReview(normalizeReview(result));
       showToast("剧本审核完成");
-      await loadTasks();
+      await loadTasks(selectedTaskId);
     } catch (err: any) {
       setError(err.message || "剧本审核失败");
     } finally {
@@ -208,8 +259,8 @@ export default function ScriptTasksPage() {
         <aside className="space-y-6">
           <section className="card">
             <div className="section-head">
-              <div><p className="eyebrow">Script Tasks</p><h3>最近剧本任务</h3></div>
-              <button className="btn ghost" onClick={loadTasks} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}</button>
+              <div><p className="eyebrow">Unified Script Tasks</p><h3>剧本任务统一入口</h3></div>
+              <button className="btn ghost" onClick={() => loadTasks(selectedTaskId)} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}</button>
             </div>
             <div className="table-list">
               {tasks.length === 0 && <div className="empty">暂无剧本任务</div>}
@@ -233,29 +284,34 @@ export default function ScriptTasksPage() {
         </aside>
         <main className="space-y-6">
           <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Standalone Script Engine</p><h2><FileText size={24} /> 剧本任务体系</h2></div>{selectedTaskId && <span className="tag">Task: {selectedTaskId.slice(0, 8)}</span>}</div>
+            <div className="section-head"><div><p className="eyebrow">Planning → Writing</p><h2><FileText size={24} /> 剧本任务体系</h2></div>{selectedTaskId && <span className="tag">Task: {selectedTaskId.slice(0, 8)}</span>}</div>
             {error && <div className="error">{error}</div>}
             <div className="grid two">
               <label className="field"><span className="label">Mode</span><input className="input" value={mode} onChange={(e) => setMode(e.target.value)} /></label>
               <label className="field"><span className="label">Duration</span><input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
               <label className="field"><span className="label">Genre</span><input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} /></label>
               <label className="field"><span className="label">Style</span><input className="input" value={style} onChange={(e) => setStyle(e.target.value)} /></label>
+              <label className="field"><span className="label">Audience</span><input className="input" value={audience} onChange={(e) => setAudience(e.target.value)} /></label>
+              <label className="field"><span className="label">Tone</span><input className="input" value={tone} onChange={(e) => setTone(e.target.value)} /></label>
+              <label className="field"><span className="label">Ending</span><input className="input" value={ending} onChange={(e) => setEnding(e.target.value)} /></label>
+              <label className="field"><span className="label">Episodes</span><input className="input" value={episodes} onChange={(e) => setEpisodes(e.target.value)} /></label>
             </div>
             <label className="field mt-4"><span className="label">剧情描述</span><textarea className="textarea" value={inputSummary} onChange={(e) => setInputSummary(e.target.value)} placeholder="不走八步，直接输入剧情概念、人物冲突、目标平台和风格要求。" /></label>
+            <label className="field mt-4"><span className="label">Custom Style</span><textarea className="textarea small" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} placeholder="可选：补充结构、禁忌、语言、平台规则。" /></label>
             <div className="top-actions mt-4">
               <button className="btn" onClick={saveDraft} disabled={busy === "draft"}><Save size={16} /> 新建草稿</button>
               <button className="btn primary" onClick={generateScript} disabled={busy === "generate"}>{busy === "generate" ? <Loader2 size={16} className="spin" /> : <Wand2 size={16} />} 生成剧本</button>
             </div>
           </section>
           <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Import</p><h3><Upload size={20} /> 导入已有剧本</h3></div><button className="btn" onClick={importScript} disabled={busy === "import"}>导入</button></div>
-            <textarea className="textarea script-input" value={importBody} onChange={(e) => setImportBody(e.target.value)} placeholder="粘贴已有剧本正文，导入后会生成 script task。" />
+            <div className="section-head"><div><p className="eyebrow">Import Existing Script</p><h3><Upload size={20} /> 导入已有剧本</h3></div><button className="btn" onClick={importScript} disabled={busy === "import"}>导入</button></div>
+            <textarea className="textarea script-input" value={importBody} onChange={(e) => setImportBody(e.target.value)} placeholder="粘贴已有剧本正文，导入后会生成同一种 script_task + script_output。" />
           </section>
           <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Editor</p><h3>正文编辑</h3></div><div className="top-actions"><button className="btn" onClick={saveBody} disabled={!selectedTaskId || busy === "save"}>保存修改</button><button className="btn cyan" onClick={runReview} disabled={!selectedTaskId || busy === "review"}><SearchCheck size={16} /> 运行审核</button></div></div>
+            <div className="section-head"><div><p className="eyebrow">Script Output</p><h3>正文编辑</h3></div><div className="top-actions"><button className="btn" onClick={saveBody} disabled={!selectedTaskId || busy === "save"}>保存修改</button><button className="btn cyan" onClick={runReview} disabled={!selectedTaskId || busy === "review"}><SearchCheck size={16} /> 运行审核</button></div></div>
             <textarea className="textarea script-editor" value={scriptBody} onChange={(e) => setScriptBody(e.target.value)} placeholder="选择、生成或导入剧本后，可在这里编辑正文。" />
           </section>
-          {review && <section className="card"><div className="section-head"><div><p className="eyebrow">Review</p><h3>审核结果</h3></div><span className="tag">Score: {review.score ?? "N/A"} · {review.status || "done"}</span></div>{review.summary && <div className="notice">{review.summary}</div>}<pre className="json-box">{JSON.stringify({ issues: review.issues || [], suggestions: review.suggestions || [], dimensions: review.dimensions || [] }, null, 2)}</pre></section>}
+          {review && <section className="card"><div className="section-head"><div><p className="eyebrow">Review Result</p><h3><CheckCircle2 size={20} /> 审核结果</h3></div><span className="tag">Score: {review.score ?? "N/A"} · {review.status || "done"}</span></div>{review.summary && <div className="notice">{review.summary}</div>}<div className="grid two mt-4"><ReviewList title="维度评分" items={review.dimensions} /><ReviewList title="问题" items={review.issues} /><ReviewList title="建议" items={review.suggestions} /></div></section>}
         </main>
       </div>
     </div>
