@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Box, Loader2, Map, Save, Users } from "lucide-react";
+import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Map, RefreshCw, Save, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import ScriptSelector from "../components/ScriptSelector";
 import { useAppStore } from "../store/useAppStore";
 import { useTudouBridge } from "../hooks/useTudouBridge";
@@ -27,8 +28,9 @@ function eventLine(eventName: string, payload: any) {
 }
 
 export default function AssetsForge() {
-  const { setRealm, currentTaskId, setCurrentTaskId } = useAppStore();
+  const { setRealm, currentTaskId, setCurrentTaskId, currentProjectId } = useAppStore();
   const { invoke } = useTudouBridge();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AssetTab>("characters");
   const [assets, setAssets] = useState<AssetBundle>(EMPTY);
   const [progress, setProgress] = useState<string[]>([]);
@@ -64,6 +66,15 @@ export default function AssetsForge() {
     return () => unlisteners.forEach((unlisten) => unlisten());
   }, [currentTaskId]);
 
+  const counts = useMemo(() => ({
+    characters: arr(assets.characters).length,
+    scenes: arr(assets.scenes).length,
+    props: arr(assets.props).length,
+  }), [assets]);
+
+  const totalAssets = counts.characters + counts.scenes + counts.props;
+  const currentStatus = busy === "extract" ? "扫描中" : busy === "save" ? "保存中" : busy === "load" ? "读取中" : totalAssets > 0 ? "已有资产" : "待扫描";
+
   async function loadAssets(taskId = currentTaskId || "") {
     if (!taskId) return;
     setBusy("load");
@@ -87,7 +98,7 @@ export default function AssetsForge() {
 
   async function extractAssets() {
     if (!currentTaskId) {
-      setError("缺少 currentTaskId。请从项目 finalize，或选择已有 script task。");
+      setError("缺少 currentTaskId。请从项目库选择已成稿的 script task，或先在工作流 Step 8 finalize。");
       return;
     }
     setBusy("extract");
@@ -125,6 +136,7 @@ export default function AssetsForge() {
         props: JSON.stringify(assets.props || []),
       });
       setProgress((prev) => ["asset:update saved", ...prev]);
+      await loadAssets(currentTaskId);
     } catch (err: any) {
       setError(err.message || "保存资产失败");
     } finally {
@@ -136,43 +148,79 @@ export default function AssetsForge() {
 
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar p-8">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
-        <aside className="space-y-6">
-          <ScriptSelector selectedTaskId={currentTaskId} onSelect={selectScript} />
-          <section className="card">
-            <p className="eyebrow">Asset Matrix</p>
-            {!currentTaskId && <div className="notice warn">没有 currentTaskId。请从项目 finalize，或选择已有 script task。</div>}
-            {error && <div className="error">{error}</div>}
-            <button className="btn primary w-full" onClick={extractAssets} disabled={!currentTaskId || busy === "extract"}>
-              {busy === "extract" ? <Loader2 size={16} className="spin" /> : null} 扫描剧本资产
-            </button>
-            <div className="json-box mt-4 max-h-64 overflow-y-auto custom-scrollbar">{progress.length ? progress.join("\n") : "等待真实资产扫描事件。"}</div>
-          </section>
-        </aside>
-
-        <main className="space-y-6">
-          <section className="card">
-            <div className="section-head">
-              <div><p className="eyebrow">Asset Editor</p><h2>资产矩阵</h2></div>
-              <button className="btn cyan" onClick={saveAssets} disabled={!currentTaskId || busy === "save"}>{busy === "save" ? <Loader2 size={16} className="spin" /> : <Save size={16} />} 保存资产</button>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <section className="card">
+          <div className="section-head">
+            <div>
+              <p className="eyebrow">Asset Recovery Console</p>
+              <h2>资产矩阵 / 验收工作台</h2>
+              <p className="row-meta mt-1">当前状态：{currentStatus}</p>
             </div>
-            <div className="top-actions">
-              <Tab active={activeTab === "characters"} onClick={() => setActiveTab("characters")} icon={<Users size={16} />} label={`角色 ${assets.characters.length}`} />
-              <Tab active={activeTab === "scenes"} onClick={() => setActiveTab("scenes")} icon={<Map size={16} />} label={`场景 ${assets.scenes.length}`} />
-              <Tab active={activeTab === "props"} onClick={() => setActiveTab("props")} icon={<Box size={16} />} label={`道具 ${assets.props.length}`} />
+            <div className="top-actions flex-wrap">
+              <button className="btn ghost" onClick={() => navigate("/projects")}><FolderKanban size={16} /> 项目库</button>
+              <button className="btn ghost" onClick={() => navigate("/scripts")}><FileText size={16} /> 剧本</button>
+              <button className="btn ghost" onClick={() => navigate("/image")} disabled={!currentTaskId}><ImageIcon size={16} /> 图像</button>
+              <button className="btn ghost" onClick={() => navigate("/video")} disabled={!currentTaskId}><Film size={16} /> 视频</button>
+              <button className="btn ghost" onClick={() => navigate("/seedance")} disabled={!currentTaskId}><Clapperboard size={16} /> Seedance</button>
             </div>
-          </section>
+          </div>
+          <div className="grid md:grid-cols-4 gap-3 mt-4">
+            <InfoCard label="Project" value={currentProjectId || "未绑定"} />
+            <InfoCard label="Script Task" value={currentTaskId || "未选择"} />
+            <InfoCard label="资产总数" value={`${totalAssets}`} />
+            <InfoCard label="当前分类" value={activeTab} />
+          </div>
+          {!currentTaskId && <div className="notice warn mt-4">没有有效 script task。请从项目库选择已成稿任务，或先在工作流 Step 8 finalize。资产页不依赖 workflow project，但必须依赖 script task。</div>}
+          {error && <div className="error mt-4">{error}</div>}
+        </section>
 
-          {items.length === 0 ? <div className="empty">当前分类暂无资产。</div> : <div className="grid two">
-            {items.map((item: any, index: number) => <section className="card" key={item.id || `${activeTab}-${index}`}>
-              <p className="eyebrow">{activeTab} #{index + 1}</p>
-              {FIELD_MAP[activeTab].map((field) => <label className="field mt-3" key={field}>
-                <span className="label">{field}</span>
-                {field === "aiPrompt" ? <textarea className="textarea small" value={item[field] || ""} onChange={(e) => updateField(activeTab, index, field, e.target.value)} /> : <input className="input" value={item[field] || ""} onChange={(e) => updateField(activeTab, index, field, e.target.value)} />}
-              </label>)}
-            </section>)}
-          </div>}
-        </main>
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+          <aside className="space-y-6">
+            <ScriptSelector selectedTaskId={currentTaskId} onSelect={selectScript} />
+            <section className="card">
+              <p className="eyebrow">Scan Controls</p>
+              <div className="grid grid-cols-3 gap-2 my-4">
+                <MiniStat label="角色" value={counts.characters} />
+                <MiniStat label="场景" value={counts.scenes} />
+                <MiniStat label="道具" value={counts.props} />
+              </div>
+              <div className="top-actions flex-col items-stretch">
+                <button className="btn primary w-full" onClick={extractAssets} disabled={!currentTaskId || busy === "extract"}>
+                  {busy === "extract" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 扫描剧本资产
+                </button>
+                <button className="btn w-full" onClick={() => currentTaskId && loadAssets(currentTaskId)} disabled={!currentTaskId || busy === "load"}>
+                  {busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 重新读取资产
+                </button>
+                <button className="btn cyan w-full" onClick={saveAssets} disabled={!currentTaskId || busy === "save"}>{busy === "save" ? <Loader2 size={16} className="spin" /> : <Save size={16} />} 保存资产修改</button>
+              </div>
+              <div className="json-box mt-4 max-h-64 overflow-y-auto custom-scrollbar">{progress.length ? progress.join("\n") : "等待真实资产扫描事件。"}</div>
+            </section>
+          </aside>
+
+          <main className="space-y-6">
+            <section className="card">
+              <div className="section-head">
+                <div><p className="eyebrow">Asset Editor</p><h2>资产卡片编辑</h2></div>
+                <button className="btn cyan" onClick={saveAssets} disabled={!currentTaskId || busy === "save"}>{busy === "save" ? <Loader2 size={16} className="spin" /> : <Save size={16} />} 保存</button>
+              </div>
+              <div className="top-actions flex-wrap">
+                <Tab active={activeTab === "characters"} onClick={() => setActiveTab("characters")} icon={<Users size={16} />} label={`角色 ${counts.characters}`} />
+                <Tab active={activeTab === "scenes"} onClick={() => setActiveTab("scenes")} icon={<Map size={16} />} label={`场景 ${counts.scenes}`} />
+                <Tab active={activeTab === "props"} onClick={() => setActiveTab("props")} icon={<Box size={16} />} label={`道具 ${counts.props}`} />
+              </div>
+            </section>
+
+            {items.length === 0 ? <div className="empty">当前分类暂无资产。先点击“扫描剧本资产”，或从左侧选择已有 script task。</div> : <div className="grid two">
+              {items.map((item: any, index: number) => <section className="card" key={item.id || `${activeTab}-${index}`}>
+                <p className="eyebrow">{activeTab} #{index + 1}</p>
+                {FIELD_MAP[activeTab].map((field) => <label className="field mt-3" key={field}>
+                  <span className="label">{field}</span>
+                  {field === "aiPrompt" ? <textarea className="textarea small" value={item[field] || ""} onChange={(e) => updateField(activeTab, index, field, e.target.value)} /> : <input className="input" value={item[field] || ""} onChange={(e) => updateField(activeTab, index, field, e.target.value)} />}
+                </label>)}
+              </section>)}
+            </div>}
+          </main>
+        </div>
       </div>
     </div>
   );
@@ -180,4 +228,12 @@ export default function AssetsForge() {
 
 function Tab({ active, onClick, icon, label }: any) {
   return <button className={`btn ${active ? "primary" : "ghost"}`} onClick={onClick}>{icon} {label}</button>;
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 min-w-0"><div className="text-white/35 text-[10px] uppercase tracking-[0.18em] mb-1">{label}</div><div className="text-white/85 text-xs font-mono truncate" title={value}>{value}</div></div>;
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-center"><div className="text-white text-lg font-black">{value}</div><div className="text-white/40 text-xs">{label}</div></div>;
 }
