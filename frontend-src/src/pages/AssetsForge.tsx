@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Map, RefreshCw, Save, Users } from 'lucide-react';
+import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Map, RefreshCw, Save, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
 import { useAppStore } from '../store/useAppStore';
@@ -32,7 +32,10 @@ const TAB_META: Record<AssetTab, { label: string; icon: any }> = {
 
 const EMPTY: AssetBundle = { characters: [], scenes: [], props: [] };
 const arr = (value: any) => (Array.isArray(value) ? value : []);
-const pickTaskId = (task: ScriptTask) => task.taskId || task.task_id || task.task?.taskId || task.task?.task_id || '';
+const pickTaskId = (task: ScriptTask) => {
+  const anyTask = task as any;
+  return anyTask.taskId || anyTask.task_id || anyTask.task?.taskId || anyTask.task?.task_id || '';
+};
 
 function eventLine(eventName: string, payload: any) {
   const count = payload?.count !== undefined ? ` count=${payload.count}` : '';
