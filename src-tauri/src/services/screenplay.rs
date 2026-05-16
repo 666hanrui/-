@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 
 use crate::db::crud;
 use crate::llm::config::RuntimeConfig;
@@ -44,6 +44,74 @@ pub fn update_step_structured(
 
 pub fn rename_project(project_id: &str, new_name: &str) -> bool {
     screenplay_store::rename_project(project_id, new_name)
+}
+
+fn scenes_to_script_body(scenes: &[serde_json::Value]) -> String {
+    scenes
+        .iter()
+        .map(|s| {
+            format!(
+                "{}\n{}",
+                s["header"].as_str().unwrap_or(""),
+                s["body"].as_str().unwrap_or("")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn linked_script_task_project_id(conn: &Connection, task_id: &str) -> Option<String> {
+    conn.query_row(
+        "SELECT project_id FROM script_tasks WHERE id = ?1",
+        params![task_id],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+}
+
+fn update_existing_script_task(
+    conn: &Connection,
+    task_id: &str,
+    project_name: &str,
+    duration: &str,
+    concept: Option<String>,
+    scenes: &[serde_json::Value],
+    doctor: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let project_id = linked_script_task_project_id(conn, task_id)
+        .ok_or_else(|| format!("linked script task not found: {}", task_id))?;
+    let t = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+        .to_string();
+    let script_body = scenes_to_script_body(scenes);
+    let raw = serde_json::json!({"scenes": scenes, "doctor": doctor});
+
+    conn.execute(
+        "UPDATE projects SET name = ?1, status = 'active', updated_at = ?2 WHERE id = ?3",
+        params![project_name, t, project_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE script_tasks SET input_summary = ?1, duration = ?2, stage = 'ready', updated_at = ?3 WHERE id = ?4",
+        params![concept.as_deref().unwrap_or_default(), duration, t, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute("DELETE FROM script_outputs WHERE task_id = ?1", params![task_id])
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO script_outputs (id, task_id, characters_json, plot_outline, script_body, raw_response, created_at) VALUES (?1, ?2, '[]', ?3, ?4, ?5, ?6)",
+        params![uuid::Uuid::new_v4().to_string(), task_id, script_body, script_body, raw.to_string(), t],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "projectId": project_id,
+        "scriptTaskId": task_id,
+        "wasCreate": false,
+    }))
 }
 
 pub fn finalize_to_script_task(
@@ -100,11 +168,10 @@ pub fn finalize_to_script_task(
         let step7 =
             screenplay_store::get_active_version(project_id, 7).ok_or("Step 7 output not found")?;
         let structured = step7.structured.ok_or("Step 7 structured data missing")?;
-        let scenes = structured["scenes"]
+        structured["scenes"]
             .as_array()
             .ok_or("Step 7 scenes is not an array")?
-            .clone();
-        scenes
+            .clone()
     };
 
     let doctor = screenplay_store::get_active_version(project_id, 8).and_then(|v| v.structured);
@@ -120,20 +187,35 @@ pub fn finalize_to_script_task(
                 .map(|c| c.chars().take(30).collect())
         })
         .unwrap_or_else(|| "未命名剧本".into());
+    let duration = rec.init.duration.clone().unwrap_or_else(|| "2分钟".into());
 
-    let result = {
-        crud::finalize_screenplay(
-            conn,
-            &crud::FinalizeScreenplayInput {
-                project_name,
-                duration: rec.init.duration.clone().unwrap_or_else(|| "2分钟".into()),
-                concept: rec.init.concept.clone(),
-                scenes,
+    if let Some(linked_task_id) = rec.linked_script_task_id.clone() {
+        if linked_script_task_project_id(conn, &linked_task_id).is_some() {
+            let result = update_existing_script_task(
+                conn,
+                &linked_task_id,
+                &project_name,
+                &duration,
+                rec.init.concept.clone(),
+                &scenes,
                 doctor,
-                linked_script_task_id: rec.linked_script_task_id.clone(),
-            },
-        )
-    };
+            )?;
+            screenplay_store::set_linked_script_task_id(project_id, &linked_task_id);
+            return Ok(result);
+        }
+    }
+
+    let result = crud::finalize_screenplay(
+        conn,
+        &crud::FinalizeScreenplayInput {
+            project_name,
+            duration,
+            concept: rec.init.concept.clone(),
+            scenes,
+            doctor,
+            linked_script_task_id: rec.linked_script_task_id.clone(),
+        },
+    );
 
     screenplay_store::set_linked_script_task_id(project_id, &result.task_id);
 
