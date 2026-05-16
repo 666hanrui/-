@@ -18,21 +18,21 @@ export default function ContextMetricGrid({ metrics }: { metrics: Metric[] }) {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-      {metrics.map((metric, index) => (
-        <div key={index} className="flex flex-col p-3 rounded-xl bg-black/20 border border-white/5 min-w-0">
-          <span className="text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-mono">{metric.label}</span>
-          {metric.copyable ? (
-            <button
-              title={`完整 ${metric.label}: ${metric.copyable}`}
-              onClick={() => handleCopy(metric.copyable!, metric.label)}
-              className={`group flex items-center gap-2 text-sm text-white/90 hover:text-indigo-300 transition-colors text-left min-w-0 ${metric.isMono ? 'font-mono' : ''}`}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+      {metrics.map((m, idx) => (
+        <div key={idx} className="flex flex-col p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] min-w-0">
+          <span className="text-[10px] text-white/30 uppercase tracking-widest mb-1.5 font-semibold truncate">{m.label}</span>
+          {m.copyable ? (
+            <div
+              title={`完整 ${m.label}:\n${m.copyable}\n点击复制`}
+              onClick={() => handleCopy(m.copyable!, m.label)}
+              className={`group flex items-center gap-1.5 text-sm text-white/80 cursor-pointer hover:text-indigo-300 transition-colors min-w-0 ${m.isMono ? 'font-mono' : ''}`}
             >
-              <span className="truncate">{metric.value}</span>
-              <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-            </button>
+              <span className="truncate">{m.value}</span>
+              <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-indigo-400/50" />
+            </div>
           ) : (
-            <div className={`text-sm text-white/90 truncate ${metric.isMono ? 'font-mono' : ''}`}>{metric.value}</div>
+            <div className={`text-sm text-white/80 truncate ${m.isMono ? 'font-mono' : ''}`}>{m.value}</div>
           )}
         </div>
       ))}
