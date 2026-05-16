@@ -119,6 +119,15 @@ Reloading AssetsForge restores records from SQLite
 Failures show real error text
 ```
 
+Current precision patch still required before final sign-off:
+
+```text
+src-tauri/src/lib.rs must wire update_assets directly to services::asset_extraction::update_assets.
+Patch document: docs/patches/asset-update-wiring.patch.md
+```
+
+The database trigger fallback already canonicalizes legacy plural inserts, but direct command wiring is still the cleaner final state.
+
 ## Stage 6: local-only and no regression
 
 Run:
@@ -142,6 +151,34 @@ All prompts are loaded from src-tauri/src/llm/prompts
 Business data is stored in SQLite or screenplay project files
 Keys are only user settings/local config, not source, prompt audit, or logs
 ```
+
+Current precision patch still required before final sign-off:
+
+```text
+src-tauri/src/llm/server_proxy.rs must redact API keys from network/provider error strings.
+Patch document: docs/patches/server-proxy-redaction.patch.md
+```
+
+## CI gate
+
+Remote branch `restore/phase-2-foundations` has a static CI gate:
+
+```text
+.github/workflows/restore-acceptance.yml
+```
+
+It runs:
+
+```text
+npm run frontend:typecheck
+npm run frontend:build
+npm run prompt:manifest
+git diff --exit-code -- src-tauri/src/llm/prompts/manifest.json
+npm run audit:local-only
+cd src-tauri && cargo check && cargo test
+```
+
+This CI gate does not replace real Tauri smoke tests or real model-call prompt dump verification.
 
 ## Baseline compile checks
 
