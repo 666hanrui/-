@@ -324,11 +324,52 @@ mod cmd {
 
     #[tauri::command]
     pub fn run_asset_extraction(
+        app: AppHandle,
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        let task_id = payload["taskId"]
+            .as_str()
+            .or_else(|| payload["task_id"].as_str())
+            .unwrap_or("")
+            .to_string();
+        app.emit(
+            "asset:scan-start",
+            serde_json::json!({ "taskId": task_id, "stage": "start" }),
+        ).ok();
         let conn = state.lock().map_err(|e| e.to_string())?;
-        crud::run_asset_extraction(&conn, &payload)
+        match crud::run_asset_extraction(&conn, &payload) {
+            Ok(result) => {
+                let characters = result["characters"].as_array().map(|v| v.len()).unwrap_or(0);
+                let scenes = result["scenes"].as_array().map(|v| v.len()).unwrap_or(0);
+                let props = result["props"].as_array().map(|v| v.len()).unwrap_or(0);
+                let fallback_used = result["fallbackUsed"].as_bool().unwrap_or(false);
+                app.emit(
+                    "asset:scan-character",
+                    serde_json::json!({ "taskId": task_id, "count": characters, "fallbackUsed": fallback_used }),
+                ).ok();
+                app.emit(
+                    "asset:scan-scene",
+                    serde_json::json!({ "taskId": task_id, "count": scenes, "fallbackUsed": fallback_used }),
+                ).ok();
+                app.emit(
+                    "asset:scan-prop",
+                    serde_json::json!({ "taskId": task_id, "count": props, "fallbackUsed": fallback_used }),
+                ).ok();
+                app.emit(
+                    "asset:scan-done",
+                    serde_json::json!({ "taskId": task_id, "characters": characters, "scenes": scenes, "props": props, "fallbackUsed": fallback_used }),
+                ).ok();
+                Ok(result)
+            }
+            Err(err) => {
+                app.emit(
+                    "asset:scan-error",
+                    serde_json::json!({ "taskId": task_id, "error": err }),
+                ).ok();
+                Err(err)
+            }
+        }
     }
 
     #[tauri::command]

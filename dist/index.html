@@ -39,7 +39,7 @@
         var _fetch = window.fetch;
         window.fetch = function (u, i) {
           var url = typeof u === "string" ? u : u && u.url;
-          if (url && url.indexOf("app://cineforge-local-auth") >= 0) {
+          if (url && url.indexOf("app://scriptstack-local-auth") >= 0) {
             var opts = i || {};
             var body = JSON.parse(opts.body || "{}");
             var p;
@@ -169,8 +169,8 @@
         };
       })();
     </script>
-    <script type="module" crossorigin src="./assets/index-DoWr8TsE.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-nY9yHF1b.css">
+    <script type="module" crossorigin src="./assets/index-BeOUL_ND.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DndFh0bG.css">
   </head>
   <body>
     <div id="root"></div>
