@@ -6,8 +6,8 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = join(__dirname, "..");
 
 const INCLUDED_ROOTS = [
-  "frontend-src/src",
-  "src-tauri/src",
+  "frontend-src",
+  "src-tauri",
   "scripts",
   "docs",
 ];
@@ -19,18 +19,13 @@ const EXCLUDED_PATH_PARTS = [
   ".git",
   "original-prompt-archive",
   "data/debug-prompts",
-];
-
-const ALLOWED_ENDPOINT_PATTERNS = [
-  "api.openai.com",
-  "generativelanguage.googleapis.com",
-  "anthropic.com",
-  "api.deepseek.com",
+  "package-lock.json",
 ];
 
 const HARD_CODED_ENDPOINT_RE = /https?:\/\/[^\s"'`<>]+/g;
-const SECRET_RE = /(?:api[_-]?key|secret|token|password)\s*[:=]\s*["'][^"']{8,}["']/i;
+const SECRET_RE = /(?:api[_-]?key|secret|token|password|refresh[_-]?token)\s*[:=]\s*["'][^"']{8,}["']/i;
 const PROMPT_FALLBACK_RE = /你是专业助手|professional assistant|generic assistant/i;
+const FILE_RE = /\.(ts|tsx|rs|mjs|js|json|md|txt|toml|html|css|scss|yml|yaml)$/;
 
 function walk(dir, out = []) {
   if (!existsSync(dir)) return out;
@@ -39,13 +34,21 @@ function walk(dir, out = []) {
     const rel = relative(repoRoot, full).replaceAll("\\", "/");
     if (EXCLUDED_PATH_PARTS.some((part) => rel.includes(part))) continue;
     if (entry.isDirectory()) walk(full, out);
-    else if (/\.(ts|tsx|rs|mjs|js|json|md|txt)$/.test(entry.name)) out.push(full);
+    else if (FILE_RE.test(entry.name)) out.push(full);
   }
   return out;
 }
 
 function lineNumber(text, index) {
   return text.slice(0, index).split(/\r?\n/).length;
+}
+
+function isAllowedUrl(rel, url) {
+  if (rel.startsWith("docs/")) return true;
+  if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) return true;
+  if (url.includes("github.com/") || url.includes("raw.githubusercontent.com/")) return true;
+  if (url.includes("docs.github.com/")) return true;
+  return false;
 }
 
 const files = INCLUDED_ROOTS.flatMap((root) => walk(join(repoRoot, root)));
@@ -57,8 +60,7 @@ for (const file of files) {
 
   for (const match of text.matchAll(HARD_CODED_ENDPOINT_RE)) {
     const url = match[0];
-    const isAllowedDocOrTest = rel.startsWith("docs/") || rel.endsWith("server_proxy.rs") || ALLOWED_ENDPOINT_PATTERNS.some((allowed) => url.includes(allowed));
-    if (!isAllowedDocOrTest) {
+    if (!isAllowedUrl(rel, url)) {
       findings.push({ type: "hardcoded_endpoint", file: rel, line: lineNumber(text, match.index ?? 0), value: url });
     }
   }
