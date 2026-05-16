@@ -146,11 +146,7 @@ impl ProjectRecord {
             })
             .or_else(|| Some("未命名剧本".into()));
 
-        let current_step = if effective_init.path.as_deref() == Some("import") {
-            8
-        } else {
-            1
-        };
+        let current_step = if effective_init.path.as_deref() == Some("import") { 8 } else { 1 };
 
         Self {
             project_id: new_project_id(),
@@ -177,12 +173,8 @@ impl ProjectRecord {
 
     pub fn load(project_id: &str) -> Option<Self> {
         let file = project_file(project_id);
-        if !file.exists() {
-            return None;
-        }
-        std::fs::read_to_string(&file)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
+        if !file.exists() { return None; }
+        std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok())
     }
 
     pub fn list_recent(limit: usize) -> Vec<serde_json::Value> {
@@ -191,27 +183,13 @@ impl ProjectRecord {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                    continue;
-                }
+                if path.extension().and_then(|e| e.to_str()) != Some("json") { continue; }
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     if let Ok(rec) = serde_json::from_str::<serde_json::Value>(&content) {
-                        let project_id = rec["projectId"]
-                            .as_str()
-                            .or_else(|| rec["project_id"].as_str())
-                            .map(String::from)
-                            .unwrap_or_default();
-                        let updated_at = rec["updatedAt"]
-                            .as_str()
-                            .or_else(|| rec["updated_at"].as_str())
-                            .map(String::from)
-                            .unwrap_or_default();
-                        let name = rec["init"]["name"]
-                            .as_str()
-                            .or_else(|| rec["init"]["name"].as_str());
-                        let concept = rec["init"]["concept"]
-                            .as_str()
-                            .or_else(|| rec["init"]["concept"].as_str());
+                        let project_id = rec["projectId"].as_str().or_else(|| rec["project_id"].as_str()).map(String::from).unwrap_or_default();
+                        let updated_at = rec["updatedAt"].as_str().or_else(|| rec["updated_at"].as_str()).map(String::from).unwrap_or_default();
+                        let name = rec["init"]["name"].as_str().or_else(|| rec["init"]["name"].as_str());
+                        let concept = rec["init"]["concept"].as_str().or_else(|| rec["init"]["concept"].as_str());
                         items.push(serde_json::json!({
                             "projectId": project_id,
                             "updatedAt": updated_at,
@@ -222,18 +200,11 @@ impl ProjectRecord {
                 }
             }
         }
-        items.sort_by(|a, b| {
-            b["updatedAt"]
-                .as_str()
-                .unwrap_or("")
-                .cmp(a["updatedAt"].as_str().unwrap_or(""))
-        });
+        items.sort_by(|a, b| b["updatedAt"].as_str().unwrap_or("").cmp(a["updatedAt"].as_str().unwrap_or("")));
         items.truncate(limit);
         items
     }
 }
-
-// ── Public API ──
 
 pub fn init_projects_dir(app_data_dir: &Path) {
     let dir = app_data_dir.join("screenplay-projects");
@@ -247,30 +218,17 @@ pub fn create_project(init: ProjectInit) -> ProjectRecord {
     rec
 }
 
-pub fn load_project(project_id: &str) -> Option<ProjectRecord> {
-    ProjectRecord::load(project_id)
-}
-
-pub fn save_project(rec: &ProjectRecord) {
-    rec.save();
-}
-
-pub fn list_recent_projects(limit: usize) -> Vec<serde_json::Value> {
-    ProjectRecord::list_recent(limit)
-}
+pub fn load_project(project_id: &str) -> Option<ProjectRecord> { ProjectRecord::load(project_id) }
+pub fn save_project(rec: &ProjectRecord) { rec.save(); }
+pub fn list_recent_projects(limit: usize) -> Vec<serde_json::Value> { ProjectRecord::list_recent(limit) }
 
 pub fn delete_project_file(project_id: &str) -> bool {
     let file = project_file(project_id);
-    file.exists()
-        .then(|| std::fs::remove_file(&file).ok())
-        .is_some()
+    file.exists().then(|| std::fs::remove_file(&file).ok()).is_some()
 }
 
 pub fn rename_project(project_id: &str, new_name: &str) -> bool {
-    let mut rec = match load_project(project_id) {
-        Some(r) => r,
-        None => return false,
-    };
+    let mut rec = match load_project(project_id) { Some(r) => r, None => return false };
     rec.init.name = Some(new_name.trim().to_string());
     rec.save();
     true
@@ -285,15 +243,8 @@ pub fn append_version(
     user_feedback: Option<String>,
 ) -> VersionEntry {
     let mut rec = load_project(project_id).expect("Project not found");
-    let bucket = rec
-        .steps
-        .entry(step_number.to_string())
-        .or_insert(StepBucket { versions: vec![] });
-
-    for v in &mut bucket.versions {
-        v.is_active = false;
-    }
-
+    let bucket = rec.steps.entry(step_number.to_string()).or_insert(StepBucket { versions: vec![] });
+    for v in &mut bucket.versions { v.is_active = false; }
     let version = VersionEntry {
         id: new_version_id(),
         step_number,
@@ -312,12 +263,8 @@ pub fn append_version(
 
 pub fn approve_step(project_id: &str, step_number: u8, next_step: Option<u8>) -> ProjectRecord {
     let mut rec = load_project(project_id).expect("Project not found");
-    if !rec.done_steps.contains(&step_number) {
-        rec.done_steps.push(step_number);
-    }
-    rec.current_step = next_step
-        .map(|n| n.clamp(0, 9))
-        .unwrap_or_else(|| (step_number + 1).min(9));
+    if !rec.done_steps.contains(&step_number) { rec.done_steps.push(step_number); }
+    rec.current_step = next_step.map(|n| n.clamp(0, 9)).unwrap_or_else(|| (step_number + 1).min(9));
     rec.save();
     rec
 }
@@ -333,9 +280,7 @@ pub fn rollback_to(project_id: &str, target_step: u8) -> ProjectRecord {
 pub fn set_active_version(project_id: &str, step_number: u8, version_id: &str) {
     let mut rec = load_project(project_id).expect("Project not found");
     if let Some(bucket) = rec.steps.get_mut(&step_number.to_string()) {
-        for v in &mut bucket.versions {
-            v.is_active = v.id == version_id;
-        }
+        for v in &mut bucket.versions { v.is_active = v.id == version_id; }
     }
     rec.save();
 }
@@ -348,31 +293,18 @@ pub fn get_active_version(project_id: &str, step_number: u8) -> Option<VersionEn
 }
 
 pub fn list_versions(project_id: &str, step_number: u8) -> Vec<VersionEntry> {
-    load_project(project_id)
-        .and_then(|rec| rec.steps.get(&step_number.to_string()).cloned())
-        .map(|b| b.versions)
-        .unwrap_or_default()
+    load_project(project_id).and_then(|rec| rec.steps.get(&step_number.to_string()).cloned()).map(|b| b.versions).unwrap_or_default()
 }
 
 pub fn set_step_selection(project_id: &str, step_number: u8, selection_id: Option<String>) {
     let mut rec = load_project(project_id).expect("Project not found");
-    if let Some(sid) = selection_id {
-        rec.selections.insert(step_number.to_string(), sid);
-    } else {
-        rec.selections.remove(&step_number.to_string());
-    }
+    if let Some(sid) = selection_id { rec.selections.insert(step_number.to_string(), sid); } else { rec.selections.remove(&step_number.to_string()); }
     rec.save();
 }
 
 pub fn save_selfcheck(project_id: &str, step_number: u8, items: Vec<serde_json::Value>) {
     let mut rec = load_project(project_id).expect("Project not found");
-    rec.selfchecks.insert(
-        step_number.to_string(),
-        SelfcheckData {
-            items,
-            created_at: now(),
-        },
-    );
+    rec.selfchecks.insert(step_number.to_string(), SelfcheckData { items, created_at: now() });
     rec.save();
 }
 
@@ -381,10 +313,7 @@ pub fn get_selfcheck(project_id: &str, step_number: u8) -> Option<SelfcheckData>
 }
 
 pub fn save_checkpoint(project_id: &str, trigger: &str, content: &str) -> bool {
-    let mut rec = match load_project(project_id) {
-        Some(r) => r,
-        None => return false,
-    };
+    let mut rec = match load_project(project_id) { Some(r) => r, None => return false };
     rec.checkpoints.insert(trigger.to_string(), content.to_string());
     rec.save();
     true
@@ -405,63 +334,41 @@ pub fn build_project_snapshot(project_id: &str) -> serde_json::Value {
         Some(r) => r,
         None => return serde_json::json!({"steps":{}, "selections":{}, "checkpoints":{}}),
     };
-
     let mut steps = serde_json::json!({});
     for n in 1..=8 {
         if let Some(version) = get_active_version(project_id, n) {
             let mut step_value = serde_json::json!({});
-            if let Some(structured) = version.structured {
-                step_value["structured"] = structured;
-            }
-            if let Some(output) = version.output.as_deref() {
-                step_value["outputPreview"] = serde_json::Value::String(truncate_chars(output, 3000));
-            }
-            if step_value.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
-                steps[&n.to_string()] = step_value;
-            }
+            if let Some(structured) = version.structured { step_value["structured"] = structured; }
+            if let Some(output) = version.output.as_deref() { step_value["outputPreview"] = serde_json::Value::String(truncate_chars(output, 3000)); }
+            if step_value.as_object().map(|o| !o.is_empty()).unwrap_or(false) { steps[&n.to_string()] = step_value; }
         }
     }
-
-    let ckpt = rec
-        .checkpoints
-        .get("after-step-6")
-        .map(|s| truncate_chars(s, 3000))
-        .unwrap_or_default();
+    let ckpt = rec.checkpoints.get("after-step-6").map(|s| truncate_chars(s, 3000)).unwrap_or_default();
     let mut checkpoints = serde_json::json!({});
-    if !ckpt.is_empty() {
-        checkpoints["after-step-6"] = serde_json::Value::String(ckpt);
-    }
-
-    serde_json::json!({
-        "steps": steps,
-        "selections": rec.selections,
-        "checkpoints": checkpoints,
-    })
+    if !ckpt.is_empty() { checkpoints["after-step-6"] = serde_json::Value::String(ckpt); }
+    serde_json::json!({ "steps": steps, "selections": rec.selections, "checkpoints": checkpoints })
 }
 
-pub fn update_active_step_structured(
-    project_id: &str,
-    step_number: u8,
-    structured: serde_json::Value,
-) -> bool {
-    let mut rec = match load_project(project_id) {
-        Some(r) => r,
-        None => return false,
-    };
-    let bucket = match rec.steps.get_mut(&step_number.to_string()) {
-        Some(b) => b,
-        None => return false,
-    };
-    let idx = bucket
-        .versions
-        .iter()
-        .position(|v| v.is_active)
-        .unwrap_or_else(|| bucket.versions.len().wrapping_sub(1));
-    let active = match bucket.versions.get_mut(idx) {
-        Some(v) => v,
-        None => return false,
-    };
-    active.structured = Some(structured);
+pub fn update_active_step_structured(project_id: &str, step_number: u8, structured: serde_json::Value) -> bool {
+    let mut rec = match load_project(project_id) { Some(r) => r, None => return false };
+    let bucket = match rec.steps.get_mut(&step_number.to_string()) { Some(b) => b, None => return false };
+    let idx = bucket.versions.iter().position(|v| v.is_active).unwrap_or_else(|| bucket.versions.len().wrapping_sub(1));
+    let active = match bucket.versions.get_mut(idx) { Some(v) => v, None => return false };
+
+    if let Some(manual_output) = structured.get("_manualOutput").and_then(|v| v.as_str()) {
+        active.output = Some(manual_output.to_string());
+        let parsed = crate::utils::step_parser::parse_step_output(step_number, manual_output);
+        let fallback = structured.as_object().map(|obj| {
+            let mut next = obj.clone();
+            next.remove("_manualOutput");
+            serde_json::Value::Object(next)
+        });
+        active.structured = parsed.or(fallback);
+        active.label = Some("手动覆写".into());
+    } else {
+        active.structured = Some(structured);
+    }
+
     rec.save();
     true
 }
