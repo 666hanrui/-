@@ -143,6 +143,42 @@ pub fn create_tables(conn: &Connection) -> Result<(), Box<dyn std::error::Error>
           FOREIGN KEY (task_id) REFERENCES script_tasks(id)
         );
 
+        CREATE TRIGGER IF NOT EXISTS asset_records_expand_legacy_characters
+        AFTER INSERT ON asset_records
+        WHEN NEW.asset_type = 'characters'
+          AND json_valid(NEW.asset_data_json)
+          AND json_type(NEW.asset_data_json) = 'array'
+        BEGIN
+          INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at)
+          SELECT lower(hex(randomblob(16))), NEW.task_id, 'character', value, NEW.created_at
+          FROM json_each(NEW.asset_data_json);
+          DELETE FROM asset_records WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS asset_records_expand_legacy_scenes
+        AFTER INSERT ON asset_records
+        WHEN NEW.asset_type = 'scenes'
+          AND json_valid(NEW.asset_data_json)
+          AND json_type(NEW.asset_data_json) = 'array'
+        BEGIN
+          INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at)
+          SELECT lower(hex(randomblob(16))), NEW.task_id, 'scene', value, NEW.created_at
+          FROM json_each(NEW.asset_data_json);
+          DELETE FROM asset_records WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS asset_records_expand_legacy_props
+        AFTER INSERT ON asset_records
+        WHEN NEW.asset_type = 'props'
+          AND json_valid(NEW.asset_data_json)
+          AND json_type(NEW.asset_data_json) = 'array'
+        BEGIN
+          INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at)
+          SELECT lower(hex(randomblob(16))), NEW.task_id, 'prop', value, NEW.created_at
+          FROM json_each(NEW.asset_data_json);
+          DELETE FROM asset_records WHERE id = NEW.id;
+        END;
+
         CREATE TABLE IF NOT EXISTS prompt_output_records (
           id TEXT PRIMARY KEY,
           task_id TEXT NOT NULL,
