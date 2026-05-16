@@ -17,6 +17,13 @@ import ResultViewer from '../components/ui/ResultViewer';
 
 interface PromptLabProps { kind: 'image' | 'video'; }
 function resultTaskId(result: any) { return result?.taskId || result?.task_id || result?.id || ''; }
+function projectIdOfTask(task: ScriptTask) {
+  const anyTask = task as any;
+  return anyTask.projectId || anyTask.project_id || anyTask.task?.projectId || anyTask.task?.project_id || '';
+}
+function sectionLines(section: any) {
+  return Array.isArray(section?.lines) ? section.lines : section?.content ? [section.content] : [];
+}
 
 export default function PromptLab({ kind }: PromptLabProps) {
   const { invoke } = useTudouBridge();
@@ -52,10 +59,11 @@ export default function PromptLab({ kind }: PromptLabProps) {
   const generatedPromptTaskId = resultTaskId(result);
   const reviewStatus = review ? `${review.score ?? 'N/A'} · ${review.status || 'done'}` : '未审核';
   const outputStatus = busy === 'generate' ? '生成中' : generatedPromptTaskId ? '已有结果' : '待生成';
+  const reviewSummary = (review as any)?.summary || '';
 
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
     const nextTaskId = getTaskId(nextTask);
-    const projectId = nextTask.projectId || nextTask.project_id || nextTask.task?.projectId || nextTask.task?.project_id || '';
+    const projectId = projectIdOfTask(nextTask);
     setTask(nextTask);
     setSourceText(text);
     if (nextTaskId) setCurrentTaskId(nextTaskId);
@@ -111,7 +119,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
 
       <ContextMetricGrid metrics={[{ label: 'Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true }, { label: 'Source Task', value: sourceScriptTaskId || '未选择', copyable: sourceScriptTaskId || undefined, isMono: true }, { label: 'Prompt Task', value: generatedPromptTaskId || '未生成', copyable: generatedPromptTaskId || undefined, isMono: true }, { label: '审核状态', value: reviewStatus }]} />
       {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-200 text-sm">{error}</div>}
-      {review && <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white/75 text-sm">审核分数：{review.score ?? 'N/A'} · {review.status || 'done'}<br />{review.summary}</div>}
+      {review && <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white/75 text-sm">审核分数：{review.score ?? 'N/A'} · {review.status || 'done'}<br />{reviewSummary}</div>}
 
       <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6 min-h-0">
         <aside className="space-y-6 min-w-0">
@@ -124,7 +132,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
           </Panel>
           {busy === 'generate' && <EmptyState title="提示词生成中" description="本地提示词引擎正在工作。" icon={<Loader2 size={30} className="animate-spin" />} />}
           {!busy && sections.length === 0 && <EmptyState title="等待生成结果" description="选择剧本、设置风格后点击生成提示词。" icon={<Save size={30} />} />}
-          {sections.length > 0 && <div className="grid grid-cols-1 gap-5">{sections.map((section, index) => <Panel key={`${section.title}-${index}`} title={section.title || `Segment ${index + 1}`} subtitle={`Segment ${index + 1}`}><ResultViewer title={`PROMPT SEGMENT ${index + 1}`} content={section.lines.join('\n')} /></Panel>)}</div>}
+          {sections.length > 0 && <div className="grid grid-cols-1 gap-5">{sections.map((section, index) => <Panel key={`${section.title}-${index}`} title={section.title || `Segment ${index + 1}`} subtitle={`Segment ${index + 1}`}><ResultViewer title={`PROMPT SEGMENT ${index + 1}`} content={sectionLines(section).join('\n')} /></Panel>)}</div>}
         </main>
       </div>
     </PageShell>
