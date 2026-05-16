@@ -453,7 +453,10 @@ mod cmd {
         state: State<'_, Mutex<Connection>>,
         task_id: String,
     ) -> Result<serde_json::Value, String> {
-        with_db(&state, |c| crud::run_quality_check(c, &task_id))
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        tokio::runtime::Handle::current().block_on(
+            crate::services::prompt_quality::run_prompt_quality_check(&conn, &task_id),
+        )
     }
 
     #[tauri::command]
