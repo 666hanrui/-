@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, Boxes, CheckCircle2, Circle, FileText, FolderKanban, Loader2, Stethoscope, Wand2 } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, Circle, FileText, FolderKanban, Loader2, Stethoscope, Wand2 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import StepEngine from '../components/workflow/StepEngine';
 import AiDoctorPanel from '../components/workflow/AiDoctorPanel';
@@ -15,6 +15,11 @@ import Panel from '../components/ui/Panel';
 import ContextMetricGrid from '../components/ui/ContextMetricGrid';
 import ActionBar, { ActionButton } from '../components/ui/ActionBar';
 import EmptyState from '../components/ui/EmptyState';
+
+const asProject = (project?: ProjectRecord | null) => (project || {}) as any;
+const projectIdOf = (project: ProjectRecord | null | undefined, fallback = '') => asProject(project).projectId || asProject(project).project_id || fallback;
+const linkedTaskIdOf = (project: ProjectRecord | null | undefined) => asProject(project).linkedScriptTaskId || asProject(project).linked_script_task_id || null;
+const backendStepOf = (project: ProjectRecord | null | undefined, fallback = 1) => Number(asProject(project).currentStep || asProject(project).current_step || fallback);
 
 export default function WorkflowValley() {
   const {
@@ -64,11 +69,11 @@ export default function WorkflowValley() {
       }
       setStaleProjectId(null);
       setProject(next);
-      const init = next.init || {};
+      const init = asProject(next).init || {};
       setScriptSeed(String(init.concept || init.name || scriptSeed || ''));
-      setCurrentProjectId(next.projectId || next.project_id || requestedProjectId);
-      setCurrentTaskId(next.linkedScriptTaskId || next.linked_script_task_id || currentTaskId || null);
-      const backendStep = Number(next.currentStep || next.current_step || 1);
+      setCurrentProjectId(projectIdOf(next, requestedProjectId));
+      setCurrentTaskId(linkedTaskIdOf(next) || currentTaskId || null);
+      const backendStep = backendStepOf(next, 1);
       const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
       setCurrentStep(nextIndex);
     } catch (err: any) {
@@ -85,10 +90,11 @@ export default function WorkflowValley() {
 
   const activeStep = WORKFLOW_STEPS[currentStep] || WORKFLOW_STEPS[0];
   const activeVersion = useMemo(() => getActiveVersion(project, activeStep.id), [project, activeStep.id]);
-  const doneSteps = project?.doneSteps || project?.done_steps || [];
+  const projectAny = asProject(project);
+  const doneSteps = projectAny.doneSteps || projectAny.done_steps || [];
   const completedCount = doneSteps.length;
-  const backendCurrentStep = Number(project?.currentStep || project?.current_step || currentStep + 1);
-  const projectTitle = String(project?.init?.name || project?.init?.concept || scriptSeed || '未命名工作流');
+  const backendCurrentStep = backendStepOf(project, currentStep + 1);
+  const projectTitle = String(projectAny.init?.name || projectAny.init?.concept || scriptSeed || '未命名工作流');
 
   const handleStepChange = (newStep: number) => {
     const safeStep = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, newStep));
@@ -99,30 +105,15 @@ export default function WorkflowValley() {
   const handleProjectChanged = (nextProject?: ProjectRecord | null) => {
     if (nextProject) {
       setProject(nextProject);
-      const backendStep = Number(nextProject.currentStep || nextProject.current_step || activeStep.id);
+      const backendStep = backendStepOf(nextProject, activeStep.id);
       const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
       setCurrentStep(nextIndex);
-      if (nextProject.linkedScriptTaskId || nextProject.linked_script_task_id) {
-        setCurrentTaskId(nextProject.linkedScriptTaskId || nextProject.linked_script_task_id || null);
-      }
+      const nextTaskId = linkedTaskIdOf(nextProject);
+      if (nextTaskId) setCurrentTaskId(nextTaskId);
       return;
     }
     reloadProject();
   };
-
-  if (!currentProjectId && !scriptSeed) {
-    return (
-      <PageShell maxWidth="max-w-5xl">
-        <EmptyState
-          icon={<Wand2 size={34} />}
-          title="引擎缺少初始参数"
-          description="请返回灵感枢纽输入宇宙碎片，或从项目库打开已有工作流项目。"
-          primaryAction={<ActionButton onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>打开项目库</ActionButton>}
-          secondaryAction={<ActionButton variant="secondary" onClick={() => navigate('/')} icon={<Wand2 size={16} />}>返回枢纽</ActionButton>}
-        />
-      </PageShell>
-    );
-  }
 
   if (!currentProjectId && staleProjectId) {
     return (
@@ -139,6 +130,20 @@ export default function WorkflowValley() {
             </ActionBar>
           </div>
         </Panel>
+      </PageShell>
+    );
+  }
+
+  if (!currentProjectId && !scriptSeed) {
+    return (
+      <PageShell maxWidth="max-w-5xl">
+        <EmptyState
+          icon={<Wand2 size={34} />}
+          title="引擎缺少初始参数"
+          description="请返回灵感枢纽输入宇宙碎片，或从项目库打开已有工作流项目。"
+          primaryAction={<ActionButton onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>打开项目库</ActionButton>}
+          secondaryAction={<ActionButton variant="secondary" onClick={() => navigate('/')} icon={<Wand2 size={16} />}>返回枢纽</ActionButton>}
+        />
       </PageShell>
     );
   }
@@ -198,7 +203,7 @@ export default function WorkflowValley() {
           </Panel>
 
           <Panel title="Genesis Seed" subtitle="当前项目种子">
-            <div className="text-sm text-white/70 leading-relaxed max-h-[180px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">{scriptSeed || project?.init?.concept || project?.init?.name || '未命名项目'}</div>
+            <div className="text-sm text-white/70 leading-relaxed max-h-[180px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">{scriptSeed || projectAny.init?.concept || projectAny.init?.name || '未命名项目'}</div>
           </Panel>
         </aside>
 
