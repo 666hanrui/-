@@ -114,6 +114,7 @@ function toBackendPayload(payload: Payload) {
   ];
   for (const [camel, snake] of pairs) {
     if (next[camel] !== undefined && next[snake] === undefined) next[snake] = next[camel];
+    if (next[snake] !== undefined && next[camel] === undefined) next[camel] = next[snake];
   }
   return next;
 }
@@ -126,35 +127,35 @@ function wrapArgs(kind: WrapKind = "raw", payload: Payload = {}) {
     case "init":
       return { init: p };
     case "taskId":
-      return { task_id: pick(p, "taskId", "task_id") || "" };
+      return { taskId: pick(p, "taskId", "task_id") || "" };
     case "projectId":
-      return { project_id: pick(p, "projectId", "project_id") || "" };
+      return { projectId: pick(p, "projectId", "project_id") || "" };
     case "projectRename":
       return {
-        project_id: pick(p, "projectId", "project_id") || "",
-        new_name: pick(p, "newName", "new_name") || "",
+        projectId: pick(p, "projectId", "project_id") || "",
+        newName: pick(p, "newName", "new_name") || "",
       };
     case "scriptBody":
       return {
-        task_id: pick(p, "taskId", "task_id") || "",
-        new_body: pick(p, "newBody", "new_body") || "",
+        taskId: pick(p, "taskId", "task_id") || "",
+        newBody: pick(p, "newBody", "new_body") || "",
       };
     case "authToken":
       return {
         token: p.token || "",
-        refresh_token: pick(p, "refreshToken", "refresh_token") || "",
+        refreshToken: pick(p, "refreshToken", "refresh_token") || "",
       };
     case "authRefresh":
-      return { refresh_token: pick(p, "refreshToken", "refresh_token") || "" };
+      return { refreshToken: pick(p, "refreshToken", "refresh_token") || "" };
     case "doctor":
       return {
         question: p.question || "",
-        project_id: pick(p, "projectId", "project_id") || "",
+        projectId: pick(p, "projectId", "project_id") || "",
       };
     case "updatePromptOutput":
       return {
-        task_id: pick(p, "taskId", "task_id") || "",
-        seedance_groups: pick(p, "seedanceGroups", "seedance_groups") || "",
+        taskId: pick(p, "taskId", "task_id") || "",
+        seedanceGroups: pick(p, "seedanceGroups", "seedance_groups") || "",
       };
     default:
       return p;
