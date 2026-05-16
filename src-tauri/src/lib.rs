@@ -323,7 +323,7 @@ mod cmd {
     }
 
     #[tauri::command]
-    pub fn run_asset_extraction(
+    pub async fn run_asset_extraction(
         app: AppHandle,
         state: State<'_, Mutex<Connection>>,
         payload: serde_json::Value,
@@ -337,8 +337,11 @@ mod cmd {
             "asset:scan-start",
             serde_json::json!({ "taskId": task_id, "stage": "start" }),
         ).ok();
-        let conn = state.lock().map_err(|e| e.to_string())?;
-        match crud::run_asset_extraction(&conn, &payload) {
+        let result = {
+            let conn = state.lock().map_err(|e| e.to_string())?;
+            crate::services::asset_extraction::run_asset_extraction(&conn, &task_id).await
+        };
+        match result {
             Ok(result) => {
                 let characters = result["characters"].as_array().map(|v| v.len()).unwrap_or(0);
                 let scenes = result["scenes"].as_array().map(|v| v.len()).unwrap_or(0);
