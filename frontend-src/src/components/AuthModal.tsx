@@ -18,20 +18,20 @@ const modalVariants = {
     scale: 1,
     y: 0,
     filter: "blur(0px)",
-    transition: { type: "spring", damping: 25, stiffness: 300 },
+    transition: { type: "spring" as const, damping: 25, stiffness: 300 },
   },
   exit: {
     opacity: 0,
     scale: 0.95,
     y: -20,
     filter: "blur(10px)",
-    transition: { duration: 0.2, ease: "easeOut" },
+    transition: { duration: 0.2, ease: "easeOut" as const },
   },
 };
 
 const shakeAnimation = {
   x: [0, -10, 10, -10, 10, 0],
-  transition: { duration: 0.4, type: "tween", ease: "easeInOut" },
+  transition: { duration: 0.4, type: "tween" as const, ease: "easeInOut" as const },
 };
 
 export default function AuthModal() {
