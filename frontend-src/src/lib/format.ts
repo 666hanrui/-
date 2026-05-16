@@ -29,19 +29,19 @@ export function getUpdatedAt(task: ScriptTask | null | undefined) {
   return task?.updatedAt || task?.updated_at || task?.createdAt || task?.created_at || task?.task?.updatedAt || task?.task?.updated_at || task?.task?.createdAt || task?.task?.created_at;
 }
 
-export function getScriptText(task: ScriptTask | null | undefined) {
+export function getScriptText(task: ScriptTask | null | undefined): string {
   if (!task) return "";
 
   const direct = task.scriptBody || task.script_body || task.plotOutline || task.plot_outline || task.body || task.text || task.output;
-  if (direct) return direct;
+  if (typeof direct === "string" && direct.trim()) return direct;
 
-  const nestedDirect = task.task ? getScriptText(task.task) : "";
+  const nestedDirect: string = task.task ? getScriptText(task.task) : "";
   if (nestedDirect) return nestedDirect;
 
   const outputs = Array.isArray(task.outputs) ? task.outputs : [];
   for (const output of outputs) {
     const text = output.scriptBody || output.script_body || output.plotOutline || output.plot_outline || output.storyboardBase || output.storyboard_base || output.hookOpening || output.hook_opening;
-    if (text && text.trim()) return text;
+    if (typeof text === "string" && text.trim()) return text;
   }
 
   return "";
