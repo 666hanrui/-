@@ -178,33 +178,34 @@ fn persist_assets(
     scenes: &[serde_json::Value],
     props: &[serde_json::Value],
     time: &str,
-) {
+) -> Result<(), String> {
     conn.execute(
         "DELETE FROM asset_records WHERE task_id = ?1",
         params![task_id],
     )
-    .ok();
+    .map_err(|e| format!("清理旧资产失败: {}", e))?;
     for c in characters {
         conn.execute(
             "INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at) VALUES (?1, ?2, 'character', ?3, ?4)",
             params![uuid(), task_id, c.to_string(), time],
         )
-        .ok();
+        .map_err(|e| format!("写入角色资产失败: {}", e))?;
     }
     for s in scenes {
         conn.execute(
             "INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at) VALUES (?1, ?2, 'scene', ?3, ?4)",
             params![uuid(), task_id, s.to_string(), time],
         )
-        .ok();
+        .map_err(|e| format!("写入场景资产失败: {}", e))?;
     }
     for p in props {
         conn.execute(
             "INSERT INTO asset_records (id, task_id, asset_type, asset_data_json, created_at) VALUES (?1, ?2, 'prop', ?3, ?4)",
             params![uuid(), task_id, p.to_string(), time],
         )
-        .ok();
+        .map_err(|e| format!("写入道具资产失败: {}", e))?;
     }
+    Ok(())
 }
 
 /// Try LLM extraction with silent retry.
@@ -270,6 +271,10 @@ pub async fn run_asset_extraction(
 ) -> Result<serde_json::Value, String> {
     let time = now();
     let settings = crate::db::crud::get_app_settings(conn);
+    if settings.text_key.trim().is_empty() || settings.text_endpoint.trim().is_empty() {
+        return Err("API 未配置，无法调用资产提取提示词。请先在设置页配置文字模型。".into());
+    }
+
     let runtime_config = RuntimeConfig {
         api_key: settings.text_key,
         api_base_url: settings.text_endpoint,
@@ -336,7 +341,7 @@ pub async fn run_asset_extraction(
         extract_props_from_script(&script_body)
     };
 
-    persist_assets(conn, task_id, &characters, &scenes, &props, &time);
+    persist_assets(conn, task_id, &characters, &scenes, &props, &time)?;
 
     let extraction_model = if fallback_used {
         format!(
@@ -358,6 +363,7 @@ pub async fn run_asset_extraction(
         "extractedAt": time,
         "extractionModel": extraction_model,
         "fallbackUsed": fallback_used,
+        "promptSlugs": ["asset_character", "asset_scene", "asset_prop"],
     }))
 }
 
