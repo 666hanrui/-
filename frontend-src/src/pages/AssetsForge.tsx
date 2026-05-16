@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Box, Loader2, Map, Save, Users } from "lucide-react";
 import ScriptSelector from "../components/ScriptSelector";
 import { useAppStore } from "../store/useAppStore";
@@ -18,6 +19,13 @@ const EMPTY: AssetBundle = { characters: [], scenes: [], props: [] };
 const arr = (v: any) => (Array.isArray(v) ? v : []);
 const pickTaskId = (task: ScriptTask) => task.taskId || task.task_id || task.task?.taskId || task.task?.task_id || "";
 
+function eventLine(eventName: string, payload: any) {
+  const count = payload?.count !== undefined ? ` count=${payload.count}` : "";
+  const model = payload?.fallbackUsed ? " fallback=true" : "";
+  const msg = payload?.message || payload?.error || payload?.stage || payload?.assetType || "";
+  return `${eventName}:${count}${model}${msg ? ` ${msg}` : ""}`;
+}
+
 export default function AssetsForge() {
   const { setRealm, currentTaskId, setCurrentTaskId } = useAppStore();
   const { invoke } = useTudouBridge();
@@ -35,12 +43,33 @@ export default function AssetsForge() {
     if (currentTaskId) loadAssets(currentTaskId);
   }, [currentTaskId]);
 
+  useEffect(() => {
+    const names = ["asset:scan-start", "asset:scan-character", "asset:scan-scene", "asset:scan-prop", "asset:scan-done", "asset:scan-error"];
+    let unlisteners: Array<() => void> = [];
+    Promise.all(names.map((name) => listen(name, (event: any) => {
+      const payload = event.payload || {};
+      const taskId = payload.taskId || payload.task_id;
+      if (taskId && currentTaskId && taskId !== currentTaskId) return;
+      setProgress((prev) => [eventLine(name, payload), ...prev].slice(0, 100));
+      if (name === "asset:scan-error") {
+        setError(payload.error || payload.message || "资产扫描失败");
+        setBusy("");
+      }
+      if (name === "asset:scan-done") {
+        setBusy("");
+        const doneTaskId = taskId || currentTaskId || "";
+        if (doneTaskId) loadAssets(doneTaskId);
+      }
+    }))).then((items) => { unlisteners = items; });
+    return () => unlisteners.forEach((unlisten) => unlisten());
+  }, [currentTaskId]);
+
   async function loadAssets(taskId = currentTaskId || "") {
     if (!taskId) return;
     setBusy("load");
     setError("");
     try {
-      const rows = await invoke<any[]>("asset/get-all", { task_id: taskId, taskId }, { silent: true });
+      const rows = await invoke<any[]>("asset/get-all", { taskId }, { silent: true });
       setAssets(normalizeAssets(rows));
     } catch (err: any) {
       setError(err.message || "读取资产失败");
@@ -63,14 +92,14 @@ export default function AssetsForge() {
     }
     setBusy("extract");
     setError("");
-    setProgress(["asset scan started"]);
+    setProgress(["asset:scan-start pending"]);
     try {
-      await invoke("asset/extract", { task_id: currentTaskId, taskId: currentTaskId }, { timeout: 900000 });
-      setProgress((prev) => ["asset scan done", ...prev]);
+      const result = await invoke<any>("asset/extract", { taskId: currentTaskId }, { timeout: 900000 });
+      if (result?.characters || result?.scenes || result?.props) setAssets(normalizeAssets(result));
       await loadAssets(currentTaskId);
     } catch (err: any) {
       setError(err.message || "资产扫描失败");
-      setProgress((prev) => [`asset scan error: ${err.message || err}`, ...prev]);
+      setProgress((prev) => [`asset:scan-error ${err.message || err}`, ...prev]);
     } finally {
       setBusy("");
     }
@@ -90,13 +119,12 @@ export default function AssetsForge() {
     setError("");
     try {
       await invoke("asset/update", {
-        task_id: currentTaskId,
         taskId: currentTaskId,
         characters: JSON.stringify(assets.characters || []),
         scenes: JSON.stringify(assets.scenes || []),
         props: JSON.stringify(assets.props || []),
       });
-      setProgress((prev) => ["assets saved", ...prev]);
+      setProgress((prev) => ["asset:update saved", ...prev]);
     } catch (err: any) {
       setError(err.message || "保存资产失败");
     } finally {
@@ -118,7 +146,7 @@ export default function AssetsForge() {
             <button className="btn primary w-full" onClick={extractAssets} disabled={!currentTaskId || busy === "extract"}>
               {busy === "extract" ? <Loader2 size={16} className="spin" /> : null} 扫描剧本资产
             </button>
-            <div className="json-box mt-4 max-h-64 overflow-y-auto custom-scrollbar">{progress.length ? progress.join("\n") : "等待资产扫描。"}</div>
+            <div className="json-box mt-4 max-h-64 overflow-y-auto custom-scrollbar">{progress.length ? progress.join("\n") : "等待真实资产扫描事件。"}</div>
           </section>
         </aside>
 
