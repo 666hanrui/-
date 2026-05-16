@@ -342,11 +342,11 @@ async fn request_openai_stream(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("OpenAI 调用失败：{}", e))?;
+        .map_err(|e| safe_error("OpenAI 调用失败", e, &cfg.api_key))?;
 
     let status = response.status();
     if !status.is_success() {
-        let detail = response.text().await.unwrap_or_default();
+        let detail = redact_secret(&response.text().await.unwrap_or_default(), &cfg.api_key);
         return Err(format!("OpenAI 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
@@ -371,11 +371,11 @@ async fn request_anthropic_stream(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Anthropic 调用失败：{}", e))?;
+        .map_err(|e| safe_error("Anthropic 调用失败", e, &cfg.api_key))?;
 
     let status = response.status();
     if !status.is_success() {
-        let detail = response.text().await.unwrap_or_default();
+        let detail = redact_secret(&response.text().await.unwrap_or_default(), &cfg.api_key);
         return Err(format!("Anthropic 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
@@ -403,11 +403,11 @@ async fn request_gemini(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Gemini 调用失败：{}", e))?;
+        .map_err(|e| safe_error("Gemini 调用失败", e, &cfg.api_key))?;
 
     let status = response.status();
     if !status.is_success() {
-        let detail = response.text().await.unwrap_or_default();
+        let detail = redact_secret(&response.text().await.unwrap_or_default(), &cfg.api_key);
         return Err(format!("Gemini 调用失败（{}）：{}", status.as_u16(), &detail[..detail.len().min(200)]));
     }
 
@@ -633,6 +633,22 @@ fn context_prompt_file(context_type: &str, params: &serde_json::Value) -> String
 }
 
 // ── Utilities ──
+
+fn redact_secret(input: &str, key: &str) -> String {
+    let mut out = input.to_string();
+    if !key.is_empty() {
+        out = out.replace(key, "[REDACTED_API_KEY]");
+        out = out.replace(&urlencoding(key), "[REDACTED_API_KEY]");
+    }
+    if let Ok(re) = regex_lite::Regex::new(r"(?i)(key|api_key|apikey|token|access_token)=([^&\s]+)") {
+        out = re.replace_all(&out, "$1=[REDACTED]").to_string();
+    }
+    out
+}
+
+fn safe_error(prefix: &str, err: impl std::fmt::Display, key: &str) -> String {
+    redact_secret(&format!("{}：{}", prefix, err), key)
+}
 
 fn resolve_temperature(model: &str, requested: Option<f32>) -> f32 {
     let name = model.to_lowercase();

@@ -387,11 +387,15 @@ mod cmd {
         characters: String,
         scenes: String,
         props: String,
-    ) {
-        with_db(&state, |c| {
-            crud::update_assets(c, &task_id, &characters, &scenes, &props)
-        })
-        .ok();
+    ) -> Result<serde_json::Value, String> {
+        let conn = state.lock().map_err(|e| e.to_string())?;
+        crate::services::asset_extraction::update_assets(
+            &conn,
+            &task_id,
+            &characters,
+            &scenes,
+            &props,
+        )
     }
 
     #[tauri::command]
