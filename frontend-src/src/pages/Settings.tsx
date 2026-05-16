@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { CheckCircle2, Cpu, Database, HardDrive, Key, Link, Loader2, Save, ShieldAlert, TestTube2 } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { CheckCircle2, Cpu, Database, HardDrive, Key, Link, Save, ShieldAlert, TestTube2 } from 'lucide-react';
 import { useTudouBridge } from '../hooks/useTudouBridge';
 import PageShell from '../components/ui/PageShell';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -159,6 +159,6 @@ export default function Settings() {
   );
 }
 
-function BoundaryItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function BoundaryItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return <div className="rounded-xl border border-white/10 bg-black/20 p-3 min-w-0"><div className="flex items-center gap-2 text-white/35 text-[10px] uppercase tracking-widest mb-2">{icon}{label}</div><div className="text-white/80 text-xs font-mono truncate" title={value}>{value}</div></div>;
 }
