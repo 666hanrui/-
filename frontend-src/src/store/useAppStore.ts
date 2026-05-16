@@ -8,6 +8,20 @@ export interface UserProfile {
   token: string;
 }
 
+export type ToastPayload =
+  | string
+  | {
+      message: string;
+      type?: "success" | "error" | "info";
+    };
+
+export interface GlobalError {
+  title: string;
+  details: string;
+  action: string;
+  suggestion: string;
+}
+
 interface AppState {
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
@@ -30,9 +44,21 @@ interface AppState {
   isDoctorPanelOpen: boolean;
   setDoctorPanelOpen: (isOpen: boolean) => void;
 
-  toast: string;
-  showToast: (message: string) => void;
+  toast: ToastPayload | null;
+  showToast: (toast: ToastPayload) => void;
   clearToast: () => void;
+
+  language: "zh" | "en";
+  setLanguage: (lang: "zh" | "en") => void;
+
+  theme: "dark" | "light";
+  setTheme: (theme: "dark" | "light") => void;
+
+  globalError: GlobalError | null;
+  setGlobalError: (error: GlobalError | null) => void;
+  clearError: () => void;
+
+  validateAndCleanIds: (backendExists: boolean, type: "project" | "task") => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -63,18 +89,38 @@ export const useAppStore = create<AppState>()(
         isDoctorPanelOpen: false,
         setDoctorPanelOpen: (isDoctorPanelOpen) => set({ isDoctorPanelOpen }),
 
-        toast: "",
+        toast: null,
         showToast: (toast) => set({ toast }, false, "ui/showToast"),
-        clearToast: () => set({ toast: "" }, false, "ui/clearToast"),
+        clearToast: () => set({ toast: null }, false, "ui/clearToast"),
+
+        language: "zh",
+        setLanguage: (language) => set({ language }, false, "ui/setLanguage"),
+
+        theme: "dark",
+        setTheme: (theme) => set({ theme }, false, "ui/setTheme"),
+
+        globalError: null,
+        setGlobalError: (globalError) => set({ globalError }, false, "ui/setGlobalError"),
+        clearError: () => set({ globalError: null }, false, "ui/clearError"),
+
+        validateAndCleanIds: (backendExists, type) => {
+          if (backendExists) return;
+          if (type === "project") set({ currentProjectId: null }, false, "script/cleanProjectId");
+          if (type === "task") set({ currentTaskId: null }, false, "script/cleanTaskId");
+        },
       }),
       {
         name: "scriptstack-core-storage",
         storage: createJSONStorage(() => localStorage),
         partialize: (state) => ({
           user: state.user,
+          language: state.language,
+          theme: state.theme,
+          currentRealm: state.currentRealm,
           scriptSeed: state.scriptSeed,
           currentProjectId: state.currentProjectId,
           currentTaskId: state.currentTaskId,
+          currentStep: state.currentStep,
         }),
       }
     ),
