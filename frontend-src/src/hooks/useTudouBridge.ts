@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { useAppStore } from "../store/useAppStore";
 
 type Payload = Record<string, any>;
 type WrapKind = "raw" | "payload" | "init" | "taskId" | "projectId" | "projectRename" | "scriptBody" | "authToken" | "authRefresh" | "doctor" | "updatePromptOutput";
@@ -179,7 +180,7 @@ export const useTudouBridge = () => {
     async <T = any>(
       action: string,
       payload: Payload = {},
-      options: { timeout?: number; silent?: boolean } = { timeout: 30000, silent: false }
+      options: { timeout?: number; silent?: boolean; hideGlobalError?: boolean } = { timeout: 30000, silent: false, hideGlobalError: false }
     ): Promise<T> => {
       const spec = resolveSpec(action);
       const backendCommand = spec.command;
@@ -215,6 +216,20 @@ export const useTudouBridge = () => {
           })();
 
           return await Promise.race([fetchPromise, timeoutPromise]);
+        } catch (err: any) {
+          const hideGlobalError = options?.hideGlobalError ?? false;
+          const errorMessage = err instanceof Error ? err.message : String(err);
+
+          if (!hideGlobalError) {
+            useAppStore.getState().setGlobalError({
+              title: "底层通信断裂 (IPC Error)",
+              action: `${action} → ${backendCommand}`,
+              details: errorMessage,
+              suggestion: "操作已被打断。请检查输入参数，或返回项目库尝试恢复上下文。",
+            });
+          }
+
+          throw err;
         } finally {
           activeRequests.current.delete(reqId);
           if (!options.silent) setIsLoading(false);
