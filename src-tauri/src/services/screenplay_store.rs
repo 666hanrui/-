@@ -6,14 +6,7 @@ use std::sync::OnceLock;
 static PROJECTS_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 fn projects_dir() -> &'static PathBuf {
-    PROJECTS_DIR.get_or_init(|| {
-        let dir = std::env::current_dir()
-            .unwrap_or_else(|_| std::env::temp_dir())
-            .join("data")
-            .join("screenplay-projects");
-        std::fs::create_dir_all(&dir).ok();
-        dir
-    })
+    PROJECTS_DIR.get().expect("screenplay_store::init_projects_dir must be called before any project operations")
 }
 
 fn project_file(project_id: &str) -> PathBuf {
@@ -209,7 +202,7 @@ impl ProjectRecord {
 pub fn init_projects_dir(app_data_dir: &Path) {
     let dir = app_data_dir.join("screenplay-projects");
     std::fs::create_dir_all(&dir).ok();
-    PROJECTS_DIR.set(dir).ok();
+    PROJECTS_DIR.set(dir).expect("screenplay_store PROJECTS_DIR already initialized — init_projects_dir must be called exactly once before any project operations");
 }
 
 pub fn create_project(init: ProjectInit) -> ProjectRecord {
