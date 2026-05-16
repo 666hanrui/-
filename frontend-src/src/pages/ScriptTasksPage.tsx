@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Boxes, CheckCircle2, FileText, Film, Image as ImageIcon, Loader2, RefreshCw, Save, SearchCheck, Upload, Wand2 } from "lucide-react";
+import { Boxes, CheckCircle2, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Route, Save, SearchCheck, Upload, Wand2 } from "lucide-react";
 import { useTudouBridge } from "../hooks/useTudouBridge";
 import { formatDate, getProjectId, getProjectName, getScriptText, getTaskId, getUpdatedAt } from "../lib/format";
 import { useAppStore } from "../store/useAppStore";
@@ -60,6 +60,7 @@ export default function ScriptTasksPage() {
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
   const setRealm = useAppStore((state) => state.setRealm);
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
   const currentTaskId = useAppStore((state) => state.currentTaskId);
   const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
   const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
@@ -86,6 +87,15 @@ export default function ScriptTasksPage() {
   const [importBody, setImportBody] = useState("");
 
   const selectedTaskId = getTaskId(selectedTask);
+  const selectedProjectId = selectedTask ? getProjectId(selectedTask) : currentProjectId || "";
+  const bodyLength = scriptBody.trim().length;
+  const taskStatus = busy ? `处理中：${busy}` : selectedTaskId ? "已选择剧本任务" : "待选择 / 待创建";
+  const reviewStatus = review ? `${review.score ?? "N/A"} · ${review.status || "done"}` : "未审核";
+
+  const selectedTaskTitle = useMemo(() => {
+    if (!selectedTask) return "尚未选择任务";
+    return getProjectName(selectedTask) || selectedTaskId || "未命名剧本任务";
+  }, [selectedTask, selectedTaskId]);
 
   useEffect(() => {
     setRealm("valley");
@@ -255,65 +265,101 @@ export default function ScriptTasksPage() {
 
   return (
     <div className="w-full h-full overflow-y-auto custom-scrollbar p-8">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
-        <aside className="space-y-6">
-          <section className="card">
-            <div className="section-head">
-              <div><p className="eyebrow">Unified Script Tasks</p><h3>剧本任务统一入口</h3></div>
-              <button className="btn ghost" onClick={() => loadTasks(selectedTaskId)} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}</button>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <section className="card">
+          <div className="section-head">
+            <div>
+              <p className="eyebrow">Script Recovery Console</p>
+              <h2><FileText size={24} /> 剧本任务 / 验收工作台</h2>
+              <p className="row-meta mt-1">{taskStatus}</p>
             </div>
-            <div className="table-list">
-              {tasks.length === 0 && <div className="empty">暂无剧本任务</div>}
-              {tasks.map((task) => {
-                const taskId = getTaskId(task);
-                return <button key={taskId} className={`row-card select-row ${selectedTaskId === taskId ? "active" : ""}`} onClick={() => selectTask(task)}>
-                  <span><span className="row-title"><FileText size={15} /> {getProjectName(task)}</span><span className="row-meta">{task.mode || "plot"} · {task.stage || "idle"} · {formatDate(getUpdatedAt(task))}</span></span>
-                </button>;
-              })}
+            <div className="top-actions flex-wrap">
+              <button className="btn ghost" onClick={() => navigate("/projects")}><FolderKanban size={16} /> 项目库</button>
+              <button className="btn ghost" onClick={() => goNext("/assets")} disabled={!selectedTaskId}><Boxes size={16} /> 资产</button>
+              <button className="btn ghost" onClick={() => goNext("/image")} disabled={!selectedTaskId}><ImageIcon size={16} /> 图像</button>
+              <button className="btn ghost" onClick={() => goNext("/video")} disabled={!selectedTaskId}><Film size={16} /> 视频</button>
+              <button className="btn ghost" onClick={() => goNext("/seedance")} disabled={!selectedTaskId}><Clapperboard size={16} /> Seedance</button>
             </div>
-          </section>
-          <section className="card">
-            <p className="eyebrow">进入后续模块</p>
-            <div className="grid two">
-              <button className="btn" onClick={() => goNext("/assets")}><Boxes size={16} /> 资产</button>
-              <button className="btn" onClick={() => goNext("/image")}><ImageIcon size={16} /> 图像</button>
-              <button className="btn" onClick={() => goNext("/video")}><Film size={16} /> 视频</button>
-              <button className="btn" onClick={() => goNext("/seedance")}><Wand2 size={16} /> Seedance</button>
-            </div>
-          </section>
-        </aside>
-        <main className="space-y-6">
-          <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Planning → Writing</p><h2><FileText size={24} /> 剧本任务体系</h2></div>{selectedTaskId && <span className="tag">Task: {selectedTaskId.slice(0, 8)}</span>}</div>
-            {error && <div className="error">{error}</div>}
-            <div className="grid two">
-              <label className="field"><span className="label">Mode</span><input className="input" value={mode} onChange={(e) => setMode(e.target.value)} /></label>
-              <label className="field"><span className="label">Duration</span><input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
-              <label className="field"><span className="label">Genre</span><input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} /></label>
-              <label className="field"><span className="label">Style</span><input className="input" value={style} onChange={(e) => setStyle(e.target.value)} /></label>
-              <label className="field"><span className="label">Audience</span><input className="input" value={audience} onChange={(e) => setAudience(e.target.value)} /></label>
-              <label className="field"><span className="label">Tone</span><input className="input" value={tone} onChange={(e) => setTone(e.target.value)} /></label>
-              <label className="field"><span className="label">Ending</span><input className="input" value={ending} onChange={(e) => setEnding(e.target.value)} /></label>
-              <label className="field"><span className="label">Episodes</span><input className="input" value={episodes} onChange={(e) => setEpisodes(e.target.value)} /></label>
-            </div>
-            <label className="field mt-4"><span className="label">剧情描述</span><textarea className="textarea" value={inputSummary} onChange={(e) => setInputSummary(e.target.value)} placeholder="不走八步，直接输入剧情概念、人物冲突、目标平台和风格要求。" /></label>
-            <label className="field mt-4"><span className="label">Custom Style</span><textarea className="textarea small" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} placeholder="可选：补充结构、禁忌、语言、平台规则。" /></label>
-            <div className="top-actions mt-4">
-              <button className="btn" onClick={saveDraft} disabled={busy === "draft"}><Save size={16} /> 新建草稿</button>
-              <button className="btn primary" onClick={generateScript} disabled={busy === "generate"}>{busy === "generate" ? <Loader2 size={16} className="spin" /> : <Wand2 size={16} />} 生成剧本</button>
-            </div>
-          </section>
-          <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Import Existing Script</p><h3><Upload size={20} /> 导入已有剧本</h3></div><button className="btn" onClick={importScript} disabled={busy === "import"}>导入</button></div>
-            <textarea className="textarea script-input" value={importBody} onChange={(e) => setImportBody(e.target.value)} placeholder="粘贴已有剧本正文，导入后会生成同一种 script_task + script_output。" />
-          </section>
-          <section className="card">
-            <div className="section-head"><div><p className="eyebrow">Script Output</p><h3>正文编辑</h3></div><div className="top-actions"><button className="btn" onClick={saveBody} disabled={!selectedTaskId || busy === "save"}>保存修改</button><button className="btn cyan" onClick={runReview} disabled={!selectedTaskId || busy === "review"}><SearchCheck size={16} /> 运行审核</button></div></div>
-            <textarea className="textarea script-editor" value={scriptBody} onChange={(e) => setScriptBody(e.target.value)} placeholder="选择、生成或导入剧本后，可在这里编辑正文。" />
-          </section>
-          {review && <section className="card"><div className="section-head"><div><p className="eyebrow">Review Result</p><h3><CheckCircle2 size={20} /> 审核结果</h3></div><span className="tag">Score: {review.score ?? "N/A"} · {review.status || "done"}</span></div>{review.summary && <div className="notice">{review.summary}</div>}<div className="grid two mt-4"><ReviewList title="维度评分" items={review.dimensions} /><ReviewList title="问题" items={review.issues} /><ReviewList title="建议" items={review.suggestions} /></div></section>}
-        </main>
+          </div>
+          <div className="grid md:grid-cols-4 gap-3 mt-4">
+            <InfoCard label="Project" value={selectedProjectId || "未绑定"} />
+            <InfoCard label="Script Task" value={selectedTaskId || "未选择"} />
+            <InfoCard label="正文长度" value={`${bodyLength}`} />
+            <InfoCard label="审核状态" value={reviewStatus} />
+          </div>
+          <div className="notice mt-4"><Route size={15} /> 三条入口都汇聚到同一种 script_task：工作流 finalize、直接生成、导入已有剧本。选中 script task 后即可进入资产、图像、视频和 Seedance。</div>
+          {error && <div className="error mt-4">{error}</div>}
+        </section>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+          <aside className="space-y-6">
+            <section className="card">
+              <div className="section-head">
+                <div><p className="eyebrow">Recent Script Tasks</p><h3>剧本任务列表</h3></div>
+                <button className="btn ghost" onClick={() => loadTasks(selectedTaskId)} disabled={busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}</button>
+              </div>
+              <div className="table-list">
+                {tasks.length === 0 && <div className="empty">暂无剧本任务。可以在右侧生成或导入。</div>}
+                {tasks.map((task) => {
+                  const taskId = getTaskId(task);
+                  return <button key={taskId} className={`row-card select-row ${selectedTaskId === taskId ? "active" : ""}`} onClick={() => selectTask(task)}>
+                    <span><span className="row-title"><FileText size={15} /> {getProjectName(task)}</span><span className="row-meta">{task.mode || "plot"} · {task.stage || "idle"} · {formatDate(getUpdatedAt(task))}</span></span>
+                  </button>;
+                })}
+              </div>
+            </section>
+            <section className="card">
+              <p className="eyebrow">Selected Task</p>
+              <div className="notice mb-3">{selectedTaskTitle}</div>
+              <div className="grid two">
+                <button className="btn" onClick={() => goNext("/assets")} disabled={!selectedTaskId}><Boxes size={16} /> 资产</button>
+                <button className="btn" onClick={() => goNext("/image")} disabled={!selectedTaskId}><ImageIcon size={16} /> 图像</button>
+                <button className="btn" onClick={() => goNext("/video")} disabled={!selectedTaskId}><Film size={16} /> 视频</button>
+                <button className="btn" onClick={() => goNext("/seedance")} disabled={!selectedTaskId}><Clapperboard size={16} /> Seedance</button>
+              </div>
+            </section>
+          </aside>
+
+          <main className="space-y-6">
+            <section className="card">
+              <div className="section-head"><div><p className="eyebrow">Planning → Writing</p><h3><Wand2 size={20} /> 生成新剧本</h3></div><span className="tag">{selectedTaskId ? "可覆盖当前任务" : "新任务"}</span></div>
+              <div className="grid two">
+                <label className="field"><span className="label">Mode</span><input className="input" value={mode} onChange={(e) => setMode(e.target.value)} /></label>
+                <label className="field"><span className="label">Duration</span><input className="input" value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
+                <label className="field"><span className="label">Genre</span><input className="input" value={genre} onChange={(e) => setGenre(e.target.value)} /></label>
+                <label className="field"><span className="label">Style</span><input className="input" value={style} onChange={(e) => setStyle(e.target.value)} /></label>
+                <label className="field"><span className="label">Audience</span><input className="input" value={audience} onChange={(e) => setAudience(e.target.value)} /></label>
+                <label className="field"><span className="label">Tone</span><input className="input" value={tone} onChange={(e) => setTone(e.target.value)} /></label>
+                <label className="field"><span className="label">Ending</span><input className="input" value={ending} onChange={(e) => setEnding(e.target.value)} /></label>
+                <label className="field"><span className="label">Episodes</span><input className="input" value={episodes} onChange={(e) => setEpisodes(e.target.value)} /></label>
+                <label className="field"><span className="label">Output Mode</span><input className="input" value={outputMode} onChange={(e) => setOutputMode(e.target.value)} /></label>
+              </div>
+              <label className="field mt-4"><span className="label">剧情描述</span><textarea className="textarea" value={inputSummary} onChange={(e) => setInputSummary(e.target.value)} placeholder="不走八步，直接输入剧情概念、人物冲突、目标平台和风格要求。" /></label>
+              <label className="field mt-4"><span className="label">Custom Style</span><textarea className="textarea small" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} placeholder="可选：补充结构、禁忌、语言、平台规则。" /></label>
+              <div className="top-actions mt-4">
+                <button className="btn" onClick={saveDraft} disabled={busy === "draft"}><Save size={16} /> 新建草稿</button>
+                <button className="btn primary" onClick={generateScript} disabled={busy === "generate"}>{busy === "generate" ? <Loader2 size={16} className="spin" /> : <Wand2 size={16} />} 生成剧本</button>
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="section-head"><div><p className="eyebrow">Import Existing Script</p><h3><Upload size={20} /> 导入已有剧本</h3></div><button className="btn" onClick={importScript} disabled={busy === "import"}>{busy === "import" ? <Loader2 size={16} className="spin" /> : <Upload size={16} />} 导入</button></div>
+              <textarea className="textarea script-input" value={importBody} onChange={(e) => setImportBody(e.target.value)} placeholder="粘贴已有剧本正文，导入后会生成同一种 script_task + script_output。" />
+            </section>
+
+            <section className="card">
+              <div className="section-head"><div><p className="eyebrow">Script Output</p><h3>正文编辑</h3></div><div className="top-actions"><button className="btn" onClick={saveBody} disabled={!selectedTaskId || busy === "save"}>{busy === "save" ? <Loader2 size={16} className="spin" /> : <Save size={16} />} 保存修改</button><button className="btn cyan" onClick={runReview} disabled={!selectedTaskId || busy === "review"}>{busy === "review" ? <Loader2 size={16} className="spin" /> : <SearchCheck size={16} />} 运行审核</button></div></div>
+              <textarea className="textarea script-editor" value={scriptBody} onChange={(e) => setScriptBody(e.target.value)} placeholder="选择、生成或导入剧本后，可在这里编辑正文。" />
+            </section>
+
+            {review && <section className="card"><div className="section-head"><div><p className="eyebrow">Review Result</p><h3><CheckCircle2 size={20} /> 审核结果</h3></div><span className="tag">Score: {review.score ?? "N/A"} · {review.status || "done"}</span></div>{review.summary && <div className="notice">{review.summary}</div>}<div className="grid two mt-4"><ReviewList title="维度评分" items={review.dimensions} /><ReviewList title="问题" items={review.issues} /><ReviewList title="建议" items={review.suggestions} /></div></section>}
+          </main>
+        </div>
       </div>
     </div>
   );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 min-w-0"><div className="text-white/35 text-[10px] uppercase tracking-[0.18em] mb-1">{label}</div><div className="text-white/85 text-xs font-mono truncate" title={value}>{value}</div></div>;
 }
