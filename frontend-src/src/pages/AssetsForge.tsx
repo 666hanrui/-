@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Map, RefreshCw, Save, Users } from 'lucide-react';
+import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Library, Map, RefreshCw, Save, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
 import { useAppStore } from '../store/useAppStore';
