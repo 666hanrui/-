@@ -1,14 +1,21 @@
-import { listen } from "@tauri-apps/api/event";
-import { AlertTriangle, Boxes, CheckCircle2, Clapperboard, Copy, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Play, RefreshCw, Route, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import ScriptSelector from "../components/ScriptSelector";
-import { useTudouBridge } from "../hooks/useTudouBridge";
-import { getTaskId } from "../lib/format";
-import { useAppStore } from "../store/useAppStore";
-import type { ScriptTask } from "../types/tudou";
+import { listen } from '@tauri-apps/api/event';
+import { AlertTriangle, Boxes, CheckCircle2, Clapperboard, Copy, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Play, RefreshCw, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import ScriptSelector from '../components/ScriptSelector';
+import { useTudouBridge } from '../hooks/useTudouBridge';
+import { getTaskId } from '../lib/format';
+import { useAppStore } from '../store/useAppStore';
+import type { ScriptTask } from '../types/tudou';
+import PageShell from '../components/ui/PageShell';
+import ModuleHeader from '../components/ui/ModuleHeader';
+import Panel from '../components/ui/Panel';
+import ContextMetricGrid from '../components/ui/ContextMetricGrid';
+import ActionBar, { ActionButton } from '../components/ui/ActionBar';
+import EmptyState from '../components/ui/EmptyState';
+import ResultViewer from '../components/ui/ResultViewer';
 
-type BusyState = "analysis" | "unit" | "all" | "load" | "";
+type BusyState = 'analysis' | 'unit' | 'all' | 'load' | '';
 
 function unitIndexOf(unit: any, fallback: number) {
   const value = unit?.unitIndex ?? unit?.unit_index ?? fallback;
@@ -16,28 +23,24 @@ function unitIndexOf(unit: any, fallback: number) {
 }
 
 function unitStatus(unit: any) {
-  return unit?.status || unit?.stage || "pending";
+  return unit?.status || unit?.stage || 'pending';
 }
 
 function parseNoteArea(value: any) {
   if (!value) return null;
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
 }
 
 function taskIdOfPayload(payload: any) {
-  return payload?.taskId || payload?.task_id || "";
+  return payload?.taskId || payload?.task_id || '';
 }
 
 function progressLine(payload: any) {
   const unit = payload?.unitIndex ?? payload?.unit_index;
-  const unitPart = unit !== undefined ? ` unit=${Number(unit) + 1}` : "";
-  const progress = payload?.progress !== undefined ? ` progress=${Math.round(Number(payload.progress) * 100)}%` : "";
-  const status = payload?.status || payload?.stage || payload?.message || "progress";
+  const unitPart = unit !== undefined ? ` unit=${Number(unit) + 1}` : '';
+  const progress = payload?.progress !== undefined ? ` progress=${Math.round(Number(payload.progress) * 100)}%` : '';
+  const status = payload?.status || payload?.stage || payload?.message || 'progress';
   return `seedance:${status}${unitPart}${progress}`;
 }
 
@@ -52,71 +55,66 @@ export default function SeedancePage() {
   const showToast = useAppStore((state) => state.showToast);
 
   const [task, setTask] = useState<ScriptTask | null>(null);
-  const [scriptText, setScriptText] = useState("");
+  const [scriptText, setScriptText] = useState('');
   const [analysis, setAnalysis] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
   const [activeUnitIndex, setActiveUnitIndex] = useState(0);
   const [progress, setProgress] = useState<string[]>([]);
-  const [busy, setBusy] = useState<BusyState>("");
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<BusyState>('');
+  const [error, setError] = useState('');
 
-  const selectedTaskId = useMemo(() => getTaskId(task) || currentTaskId || "", [task, currentTaskId]);
+  const selectedTaskId = useMemo(() => getTaskId(task) || currentTaskId || '', [task, currentTaskId]);
   const activeUnit = useMemo(() => units.find((unit, index) => unitIndexOf(unit, index) === activeUnitIndex) || units[0] || null, [units, activeUnitIndex]);
   const noteArea = parseNoteArea(activeUnit?.noteAreaJson || activeUnit?.note_area_json);
-  const completeUnits = useMemo(() => units.filter((unit) => ["done", "completed", "ready"].includes(unitStatus(unit))).length, [units]);
+  const completeUnits = useMemo(() => units.filter((unit) => ['done', 'completed', 'ready'].includes(unitStatus(unit))).length, [units]);
   const pendingUnits = Math.max(0, units.length - completeUnits);
-  const analysisStatus = analysis ? "已完成" : "待分析";
-  const workStatus = busy ? `处理中：${busy}` : units.length > 0 ? `Units ${completeUnits}/${units.length}` : "待生成 Units";
+  const analysisStatus = analysis ? '已完成' : '待分析';
+  const workStatus = busy ? `处理中：${busy}` : units.length > 0 ? `Units ${completeUnits}/${units.length}` : '待生成 Units';
 
-  useEffect(() => {
-    setRealm("valley");
-  }, [setRealm]);
+  useEffect(() => { setRealm('valley'); }, [setRealm]);
 
   useEffect(() => {
     if (currentTaskId && !task) loadUnits(currentTaskId, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTaskId]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    listen("seedance:progress", (event: any) => {
+    listen('seedance:progress', (event: any) => {
       const payload = event.payload || {};
       const pid = taskIdOfPayload(payload);
       if (pid && currentTaskId && pid !== currentTaskId) return;
       setProgress((prev) => [progressLine(payload), ...prev].slice(0, 120));
       if (payload.error) setError(String(payload.error));
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      if (unlisten) unlisten();
-    };
+    }).then((fn) => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
   }, [currentTaskId]);
 
   const loadUnits = async (taskId: string, silent = false) => {
     if (!taskId) return;
-    if (!silent) setBusy("load");
-    setError("");
+    if (!silent) setBusy('load');
+    setError('');
     try {
-      const rows = await invoke<any[]>("seedance/list-units", { taskId }, { silent: true });
+      const rows = await invoke<any[]>('seedance/list-units', { taskId }, { silent: true });
       const list = Array.isArray(rows) ? rows : [];
       setUnits(list);
       if (list.length > 0) setActiveUnitIndex(unitIndexOf(list[0], 0));
-      const cached = await invoke<any>("seedance/get-analysis", { taskId }, { silent: true }).catch(() => null);
+      const cached = await invoke<any>('seedance/get-analysis', { taskId }, { silent: true }).catch(() => null);
       setAnalysis(cached);
     } catch (err: any) {
-      setError(err.message || "读取 Seedance 单元失败");
+      setError(err.message || '读取 Seedance 单元失败');
     } finally {
-      if (!silent) setBusy("");
+      if (!silent) setBusy('');
     }
   };
 
   const onSelectScript = (nextTask: ScriptTask, text: string) => {
     const taskId = getTaskId(nextTask);
-    const projectId = nextTask.projectId || nextTask.project_id || nextTask.task?.projectId || nextTask.task?.project_id || "";
+    const projectId = nextTask.projectId || nextTask.project_id || nextTask.task?.projectId || nextTask.task?.project_id || '';
     setTask(nextTask);
     setScriptText(text);
     setProgress([]);
-    setError("");
+    setError('');
     if (projectId) setCurrentProjectId(projectId);
     if (taskId) {
       setCurrentTaskId(taskId);
@@ -126,71 +124,71 @@ export default function SeedancePage() {
 
   const runAnalysis = async () => {
     if (!selectedTaskId) return;
-    setBusy("analysis");
-    setError("");
-    setProgress(["seedance:phase-ad start"]);
+    setBusy('analysis');
+    setError('');
+    setProgress(['seedance:phase-ad start']);
     try {
-      const result = await invoke<any>("seedance/phase-ad", { taskId: selectedTaskId }, { timeout: 900_000 });
+      const result = await invoke<any>('seedance/phase-ad', { taskId: selectedTaskId }, { timeout: 900000 });
       setAnalysis(result);
       await loadUnits(selectedTaskId, true);
-      setProgress((prev) => ["seedance:phase-ad done", ...prev]);
-      showToast("Seedance Phase A-D 分析完成");
+      setProgress((prev) => ['seedance:phase-ad done', ...prev]);
+      showToast('Seedance Phase A-D 分析完成');
     } catch (err: any) {
-      setError(err.message || "Seedance A-D 分析失败");
+      setError(err.message || 'Seedance A-D 分析失败');
       setProgress((prev) => [`seedance:phase-ad error ${err.message || err}`, ...prev]);
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const runUnit = async (unitIndex: number) => {
     if (!selectedTaskId) return;
-    setBusy("unit");
-    setError("");
+    setBusy('unit');
+    setError('');
     setActiveUnitIndex(unitIndex);
     setProgress((prev) => [`seedance:unit start unit=${unitIndex + 1}`, ...prev]);
     try {
-      await invoke<any>("seedance/run-unit", { taskId: selectedTaskId, unitIndex }, { timeout: 900_000 });
+      await invoke<any>('seedance/run-unit', { taskId: selectedTaskId, unitIndex }, { timeout: 900000 });
       await loadUnits(selectedTaskId, true);
       setProgress((prev) => [`seedance:unit done unit=${unitIndex + 1}`, ...prev]);
       showToast(`镜头单元 ${unitIndex + 1} 已生成`);
     } catch (err: any) {
-      setError(err.message || "单元生成失败");
+      setError(err.message || '单元生成失败');
       setProgress((prev) => [`seedance:unit error unit=${unitIndex + 1} ${err.message || err}`, ...prev]);
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const runAll = async () => {
     if (!selectedTaskId || units.length === 0) return;
-    setBusy("all");
-    setError("");
-    setProgress((prev) => ["seedance:run-all start", ...prev]);
+    setBusy('all');
+    setError('');
+    setProgress((prev) => ['seedance:run-all start', ...prev]);
     try {
       for (let i = 0; i < units.length; i += 1) {
         const unitIndex = unitIndexOf(units[i], i);
         setActiveUnitIndex(unitIndex);
         setProgress((prev) => [`seedance:run-all unit=${unitIndex + 1}/${units.length} start`, ...prev]);
-        await invoke<any>("seedance/run-unit", { taskId: selectedTaskId, unitIndex }, { timeout: 900_000 });
+        await invoke<any>('seedance/run-unit', { taskId: selectedTaskId, unitIndex }, { timeout: 900000 });
         await loadUnits(selectedTaskId, true);
         setProgress((prev) => [`seedance:run-all unit=${unitIndex + 1}/${units.length} done`, ...prev]);
       }
-      setProgress((prev) => ["seedance:run-all done", ...prev]);
-      showToast("全部镜头单元已逐条生成完成");
+      setProgress((prev) => ['seedance:run-all done', ...prev]);
+      showToast('全部镜头单元已逐条生成完成');
     } catch (err: any) {
-      setError(err.message || "批量生成失败");
+      setError(err.message || '批量生成失败');
       setProgress((prev) => [`seedance:run-all error ${err.message || err}`, ...prev]);
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const refreshCurrentUnit = async () => {
     if (!selectedTaskId) return;
-    setBusy("load");
+    setBusy('load');
     try {
-      const unit = await invoke<any>("seedance/get-unit", { taskId: selectedTaskId, unitIndex: activeUnitIndex }, { silent: true });
+      const unit = await invoke<any>('seedance/get-unit', { taskId: selectedTaskId, unitIndex: activeUnitIndex }, { silent: true });
       if (unit) {
         setUnits((prev) => {
           const rest = prev.filter((item, index) => unitIndexOf(item, index) !== activeUnitIndex);
@@ -198,129 +196,56 @@ export default function SeedancePage() {
         });
       }
     } catch (err: any) {
-      setError(err.message || "读取当前单元失败");
+      setError(err.message || '读取当前单元失败');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   return (
-    <div className="w-full h-full overflow-y-auto custom-scrollbar p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <section className="card">
-          <div className="section-head">
-            <div>
-              <p className="eyebrow">Seedance Recovery Console</p>
-              <h2><Clapperboard size={24} /> Seedance V5 / 验收工作台</h2>
-              <p className="row-meta mt-1">{workStatus}</p>
-            </div>
-            <div className="top-actions flex-wrap">
-              <button className="btn ghost" onClick={() => navigate("/projects")}><FolderKanban size={16} /> 项目库</button>
-              <button className="btn ghost" onClick={() => navigate("/scripts")}><FileText size={16} /> 剧本</button>
-              <button className="btn ghost" onClick={() => navigate("/assets")} disabled={!selectedTaskId}><Boxes size={16} /> 资产</button>
-              <button className="btn ghost" onClick={() => navigate("/image")} disabled={!selectedTaskId}><ImageIcon size={16} /> 图像</button>
-              <button className="btn ghost" onClick={() => navigate("/video")} disabled={!selectedTaskId}><Film size={16} /> 视频</button>
-            </div>
-          </div>
-          <div className="grid md:grid-cols-4 gap-3 mt-4">
-            <InfoCard label="Project" value={currentProjectId || "未绑定"} />
-            <InfoCard label="Script Task" value={selectedTaskId || "未选择"} />
-            <InfoCard label="A-D 分析" value={analysisStatus} />
-            <InfoCard label="Units" value={`${completeUnits}/${units.length} done · ${pendingUnits} pending`} />
-          </div>
-          <div className="notice mt-4"><Route size={15} /> Seedance 固定两层：Phase A-D 分析 → Unit E/F/G 生成。当前页面监听 seedance:progress，并以 script task 作为恢复主键。</div>
-          {!selectedTaskId && <div className="notice warn mt-4">请选择 script task。Seedance V5 以 script task 作为恢复主键。</div>}
-          {error && <div className="error mt-4"><AlertTriangle size={16} /> {error}</div>}
-        </section>
+    <PageShell maxWidth="max-w-full">
+      <ModuleHeader
+        icon={<Clapperboard size={24} />}
+        eyebrow="Seedance Recovery Console"
+        title="Seedance V5 / 验收工作台"
+        subtitle="固定两层：Phase A-D 分析 → Unit E/F/G 生成。页面监听 seedance:progress，并以 script task 为恢复主键。"
+        actions={<ActionBar align="right" className="flex-wrap"><ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!selectedTaskId} icon={<Boxes size={16} />}>资产</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/image')} disabled={!selectedTaskId} icon={<ImageIcon size={16} />}>图像</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/video')} disabled={!selectedTaskId} icon={<Film size={16} />}>视频</ActionButton></ActionBar>}
+      />
 
-        <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
-          <aside className="space-y-6">
-            <ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} />
-            <div className="card">
-              <p className="eyebrow">Script Preview</p>
-              <div className="script-preview scroll">{scriptText || "请选择一个剧本任务。"}</div>
+      <ContextMetricGrid metrics={[{ label: 'Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true }, { label: 'Script Task', value: selectedTaskId || '未选择', copyable: selectedTaskId || undefined, isMono: true }, { label: 'A-D 分析', value: analysisStatus }, { label: 'Units', value: `${completeUnits}/${units.length} done · ${pendingUnits} pending` }]} />
+      {!selectedTaskId && <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-yellow-100 text-sm">请选择 script task。Seedance V5 以 script task 作为恢复主键。</div>}
+      {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-200 text-sm flex items-center gap-2"><AlertTriangle size={16} /> {error}</div>}
+
+      <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6 min-h-0">
+        <aside className="space-y-6 min-w-0">
+          <Panel title="Script Source" subtitle="选择剧本任务作为 Seedance 源" noPadding><div className="p-4"><ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} /></div></Panel>
+          <Panel title="Script Preview"><ResultViewer title="SCRIPT" content={scriptText || '请选择一个剧本任务。'} /></Panel>
+          <Panel title="Progress"><ResultViewer title="SEEDANCE EVENTS" content={progress.length ? progress.join('\n') : '等待 seedance:progress。'} /></Panel>
+        </aside>
+
+        <main className="space-y-6 min-w-0">
+          <Panel title="Generation Controls" subtitle={workStatus} actions={<ActionBar className="flex-wrap"><ActionButton variant="secondary" onClick={() => selectedTaskId && loadUnits(selectedTaskId)} disabled={!selectedTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>恢复</ActionButton><ActionButton onClick={runAnalysis} disabled={!selectedTaskId} isLoading={busy === 'analysis'} icon={<Sparkles size={16} />}>Phase A-D</ActionButton><ActionButton variant="secondary" onClick={runAll} disabled={!selectedTaskId || units.length === 0} isLoading={busy === 'all'} icon={<Play size={16} />}>全部生成</ActionButton></ActionBar>}>
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
+              <Panel title="Layer 1 · Phase A-D 分析" subtitle={analysis ? 'ready' : 'pending'}>
+                <div className="grid grid-cols-2 gap-3 mb-4"><MiniInfo label="总时长" value={analysis?.totalSec || analysis?.total_sec || 'N/A'} /><MiniInfo label="单元数" value={analysis?.totalUnits || analysis?.total_units || units.length || 'N/A'} /></div>
+                <ResultViewer title="A-D ANALYSIS" content={analysis ? JSON.stringify(analysis, null, 2) : '等待 A-D 分析结果。'} />
+              </Panel>
+
+              <Panel title="Layer 2 · Unit E/F/G 列表" subtitle={`${units.length} units`}>
+                {units.length === 0 ? <EmptyState title="暂无 Units" description="完成 A-D 分析后会出现 seedance_units。" icon={<CheckCircle2 size={28} />} /> : <div className="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar">{units.map((unit, index) => { const unitIndex = unitIndexOf(unit, index); const status = unitStatus(unit); return <button key={unit.id || unitIndex} onClick={() => setActiveUnitIndex(unitIndex)} className={`w-full rounded-xl border p-3 text-left transition-all ${activeUnitIndex === unitIndex ? 'bg-indigo-500/20 border-indigo-500/40' : 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]'}`}><div className="text-sm font-bold text-white/85">Unit {unitIndex + 1} · {unit.sceneType || unit.scene_type || 'scene'}</div><div className="mt-1 text-[11px] text-white/40 font-mono">{status} · {unit.durationSec || unit.duration_sec || '?'}s · shots {unit.subShotCount || unit.sub_shot_count || '?'}</div></button>; })}</div>}
+              </Panel>
             </div>
-            <div className="card">
-              <p className="eyebrow">Progress</p>
-              <pre className="json-box">{progress.length ? progress.join("\n") : "等待 seedance:progress。"}</pre>
-            </div>
-          </aside>
+          </Panel>
 
-          <main className="space-y-6">
-            <section className="card">
-              <div className="section-head">
-                <div><p className="eyebrow">Generation Controls</p><h3>Phase A-D / Unit E-F-G</h3></div>
-                <div className="top-actions flex-wrap">
-                  <button className="btn" onClick={() => selectedTaskId && loadUnits(selectedTaskId)} disabled={!selectedTaskId || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 恢复</button>
-                  <button className="btn primary" onClick={runAnalysis} disabled={!selectedTaskId || busy === "analysis"}>{busy === "analysis" ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />} Phase A-D</button>
-                  <button className="btn cyan" onClick={runAll} disabled={!selectedTaskId || units.length === 0 || busy === "all"}>{busy === "all" ? <Loader2 size={16} className="spin" /> : <Play size={16} />} 全部生成</button>
-                </div>
-              </div>
-            </section>
-
-            <div className="grid two">
-              <section className="card">
-                <div className="section-head"><div><p className="eyebrow">Layer 1</p><h3>Phase A-D 分析</h3></div>{analysis && <span className="tag"><CheckCircle2 size={14} /> ready</span>}</div>
-                <div className="grid two mb-4">
-                  <div className="notice">总时长：{analysis?.totalSec || analysis?.total_sec || "N/A"}</div>
-                  <div className="notice">单元数：{analysis?.totalUnits || analysis?.total_units || units.length || "N/A"}</div>
-                </div>
-                <pre className="json-box">{analysis ? JSON.stringify(analysis, null, 2) : "等待 A-D 分析结果。"}</pre>
-              </section>
-
-              <section className="card">
-                <p className="eyebrow">Layer 2</p>
-                <h3>Unit E/F/G 列表</h3>
-                <div className="table-list mt-4">
-                  {busy === "load" && <div className="notice"><Loader2 size={14} className="spin" /> 正在读取...</div>}
-                  {units.length === 0 && <div className="empty">完成 A-D 分析后会出现 seedance_units。</div>}
-                  {units.map((unit, index) => {
-                    const unitIndex = unitIndexOf(unit, index);
-                    const status = unitStatus(unit);
-                    return (
-                      <button key={unit.id || unitIndex} className={`row-card select-row ${activeUnitIndex === unitIndex ? "active" : ""}`} onClick={() => setActiveUnitIndex(unitIndex)}>
-                        <span>
-                          <span className="row-title">Unit {unitIndex + 1} · {unit.sceneType || unit.scene_type || "scene"}</span>
-                          <span className="row-meta">{status} · {unit.durationSec || unit.duration_sec || "?"}s · shots {unit.subShotCount || unit.sub_shot_count || "?"}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            </div>
-
-            <section className="card">
-              <div className="section-head">
-                <div><p className="eyebrow">Unit Detail</p><h3>Unit {activeUnit ? activeUnitIndex + 1 : "-"} 生成结果</h3></div>
-                <div className="top-actions">
-                  <button className="btn" onClick={refreshCurrentUnit} disabled={!selectedTaskId || !activeUnit || busy === "load"}>{busy === "load" ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />} 刷新单元</button>
-                  <button className="btn primary" onClick={() => runUnit(activeUnitIndex)} disabled={!selectedTaskId || !activeUnit || busy === "unit"}>{busy === "unit" ? <Loader2 size={16} className="spin" /> : <Copy size={16} />} 生成当前单元</button>
-                </div>
-              </div>
-              {!activeUnit ? <div className="empty">请选择一个 Unit。</div> : <div className="grid two">
-                <div>
-                  <div className="grid two mb-4">
-                    <div className="notice">status：{unitStatus(activeUnit)}</div>
-                    <div className="notice">retry：{activeUnit.retryCount ?? activeUnit.retry_count ?? 0}</div>
-                  </div>
-                  {(activeUnit.errorMessage || activeUnit.error_message) && <div className="error">{activeUnit.errorMessage || activeUnit.error_message}</div>}
-                  <p className="eyebrow mt-4">copyArea</p>
-                  <pre className="json-box">{activeUnit.copyArea || activeUnit.copy_area || "尚未生成 copyArea。"}</pre>
-                </div>
-                <div>
-                  <p className="eyebrow">noteAreaJson</p>
-                  <pre className="json-box">{noteArea ? JSON.stringify(noteArea, null, 2) : "尚未生成 noteAreaJson。"}</pre>
-                </div>
-              </div>}
-            </section>
-          </main>
-        </div>
+          <Panel title={`Unit Detail · ${activeUnit ? activeUnitIndex + 1 : '-'}`} subtitle="copyArea / noteAreaJson / status" actions={<ActionBar><ActionButton variant="secondary" onClick={refreshCurrentUnit} disabled={!selectedTaskId || !activeUnit || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>刷新单元</ActionButton><ActionButton onClick={() => runUnit(activeUnitIndex)} disabled={!selectedTaskId || !activeUnit || busy === 'unit'} isLoading={busy === 'unit'} icon={<Copy size={16} />}>生成当前单元</ActionButton></ActionBar>}>
+            {!activeUnit ? <EmptyState title="请选择一个 Unit" description="左侧完成 A-D 分析后，在 Unit 列表里选择一个单元。" icon={<Clapperboard size={28} />} /> : <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5"><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><MiniInfo label="status" value={unitStatus(activeUnit)} /><MiniInfo label="retry" value={activeUnit.retryCount ?? activeUnit.retry_count ?? 0} /></div>{(activeUnit.errorMessage || activeUnit.error_message) && <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-red-200 text-sm">{activeUnit.errorMessage || activeUnit.error_message}</div>}<ResultViewer title="COPY AREA" content={activeUnit.copyArea || activeUnit.copy_area || '尚未生成 copyArea。'} /></div><ResultViewer title="NOTE AREA JSON" content={noteArea ? JSON.stringify(noteArea, null, 2) : '尚未生成 noteAreaJson。'} /></div>}
+          </Panel>
+        </main>
       </div>
-    </div>
+    </PageShell>
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 min-w-0"><div className="text-white/35 text-[10px] uppercase tracking-[0.18em] mb-1">{label}</div><div className="text-white/85 text-xs font-mono truncate" title={value}>{value}</div></div>;
+function MiniInfo({ label, value }: { label: string; value: any }) {
+  return <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-white/35 text-[10px] uppercase tracking-[0.18em] mb-1">{label}</div><div className="text-white/85 text-xs font-mono truncate" title={String(value)}>{String(value)}</div></div>;
 }
