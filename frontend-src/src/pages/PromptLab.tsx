@@ -1,4 +1,4 @@
-import { Activity, Boxes, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Save, Wand2 } from 'lucide-react';
+import { Activity, Boxes, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Layers3, Loader2, Save, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
@@ -113,8 +113,8 @@ export default function PromptLab({ kind }: PromptLabProps) {
         icon={<Icon size={24} />}
         eyebrow="Prompt Recovery Console"
         title={kind === 'image' ? '图像提示词 / 验收工作台' : '视频提示词 / 验收工作台'}
-        subtitle={kind === 'image' ? '旧独立图像提示词流程。' : '旧独立视频提示词流程。'}
-        actions={<ActionBar align="right" className="flex-wrap"><ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!sourceScriptTaskId} icon={<Boxes size={16} />}>资产</ActionButton><ActionButton variant="secondary" onClick={() => navigate(kind === 'image' ? '/video' : '/image')} disabled={!sourceScriptTaskId} icon={kind === 'image' ? <Film size={16} /> : <ImageIcon size={16} />}>{kind === 'image' ? '视频' : '图像'}</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/seedance')} disabled={!sourceScriptTaskId} icon={<Clapperboard size={16} />}>Seedance</ActionButton></ActionBar>}
+        subtitle={kind === 'image' ? '旧独立图像提示词流程。逐镜分镜请进入 V2 旧链路工作台。' : '旧独立视频提示词流程。逐镜分镜请进入 V2 旧链路工作台。'}
+        actions={<ActionBar align="right" className="flex-wrap"><ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!sourceScriptTaskId} icon={<Boxes size={16} />}>资产</ActionButton><ActionButton variant="secondary" onClick={() => navigate(kind === 'image' ? '/video' : '/image')} disabled={!sourceScriptTaskId} icon={kind === 'image' ? <Film size={16} /> : <ImageIcon size={16} />}>{kind === 'image' ? '视频' : '图像'}</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!sourceScriptTaskId} icon={<Layers3 size={16} />}>逐镜</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/seedance')} disabled={!sourceScriptTaskId} icon={<Clapperboard size={16} />}>Seedance</ActionButton></ActionBar>}
       />
 
       <ContextMetricGrid metrics={[{ label: 'Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true }, { label: 'Source Task', value: sourceScriptTaskId || '未选择', copyable: sourceScriptTaskId || undefined, isMono: true }, { label: 'Prompt Task', value: generatedPromptTaskId || '未生成', copyable: generatedPromptTaskId || undefined, isMono: true }, { label: '审核状态', value: reviewStatus }]} />
@@ -127,7 +127,7 @@ export default function PromptLab({ kind }: PromptLabProps) {
           <Panel title="源剧本正文" subtitle={`长度 ${sourceText.trim().length} · 结果段落 ${sections.length}`}><TextArea value={sourceText} onChange={(event: any) => setSourceText(event.target.value)} rows={16} /></Panel>
         </aside>
         <main className="space-y-6 min-w-0">
-          <Panel title={kind === 'image' ? '独立图像提示词' : '独立视频提示词'} subtitle={outputStatus} actions={<ActionBar><ActionButton onClick={generate} disabled={!sourceText.trim()} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成提示词</ActionButton><ActionButton variant="secondary" onClick={runReview} disabled={!generatedPromptTaskId} isLoading={busy === 'review'} icon={<Activity size={16} />}>审核</ActionButton></ActionBar>}>
+          <Panel title={kind === 'image' ? '独立图像提示词' : '独立视频提示词'} subtitle={outputStatus} actions={<ActionBar><ActionButton onClick={generate} disabled={!sourceText.trim()} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成提示词</ActionButton><ActionButton variant="secondary" onClick={runReview} disabled={!generatedPromptTaskId} isLoading={busy === 'review'} icon={<Activity size={16} />}>审核</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!sourceScriptTaskId} icon={<Layers3 size={16} />}>进入逐镜 V2</ActionButton></ActionBar>}>
             <div className="grid md:grid-cols-2 gap-4"><FormField label={kind === 'image' ? 'Visual Style' : 'Video Style'}><TextInput value={style} onChange={(event: any) => setStyle(event.target.value)} /></FormField><FormField label={kind === 'image' ? 'Image Goal' : 'Motion Focus'}><TextInput value={goal} onChange={(event: any) => setGoal(event.target.value)} /></FormField></div>
           </Panel>
           {busy === 'generate' && <EmptyState title="提示词生成中" description="本地提示词引擎正在工作。" icon={<Loader2 size={30} className="animate-spin" />} />}
