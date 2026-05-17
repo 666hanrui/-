@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderKanban, Trash2, Edit2, Play, FileText, Library, Image as ImageIcon, Film, Clapperboard, Clock, Loader2, Check, X } from 'lucide-react';
+import { FolderKanban, Trash2, Edit2, Play, FileText, Library, Image as ImageIcon, Film, Layers3, Clapperboard, Clock, Loader2, Check, X } from 'lucide-react';
 import { useTudouBridge } from '../hooks/useTudouBridge';
 import { useAppStore } from '../store/useAppStore';
 import PageShell from '../components/ui/PageShell';
@@ -196,7 +196,7 @@ export default function ProjectsPage() {
     navigate('/workflow');
   };
 
-  const openTask = (project: ArchiveProject, stage: 'scripts' | 'assets' | 'image' | 'video' | 'seedance') => {
+  const openTask = (project: ArchiveProject, stage: 'scripts' | 'assets' | 'image' | 'video' | 'frame-prompt' | 'seedance') => {
     setCurrentProjectId(project.source === 'screenplay' ? project.projectId : null);
     const taskId = primaryScriptTask(project);
     setCurrentTaskId(taskId ? taskId : null);
@@ -205,7 +205,7 @@ export default function ProjectsPage() {
     navigate(`/${stage}`);
   };
 
-  const handleRoute = (project: ArchiveProject, stage: 'workflow' | 'scripts' | 'assets' | 'image' | 'video' | 'seedance') => {
+  const handleRoute = (project: ArchiveProject, stage: 'workflow' | 'scripts' | 'assets' | 'image' | 'video' | 'frame-prompt' | 'seedance') => {
     if (stage === 'workflow') openWorkflowProject(project);
     else openTask(project, stage);
   };
@@ -301,6 +301,7 @@ export default function ProjectsPage() {
                       <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Library size={14} />} onClick={() => handleRoute(project, 'assets')} title={!hasTask ? '需 Script Task' : ''}>资产</ActionButton>
                       <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<ImageIcon size={14} />} onClick={() => handleRoute(project, 'image')} title={!hasTask ? '需 Script Task' : ''}>图像</ActionButton>
                       <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Film size={14} />} onClick={() => handleRoute(project, 'video')} title={!hasTask ? '需 Script Task' : ''}>视频</ActionButton>
+                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Layers3 size={14} />} onClick={() => handleRoute(project, 'frame-prompt')} title={!hasTask ? '需 Script Task' : ''}>逐镜</ActionButton>
                       <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Clapperboard size={14} />} onClick={() => handleRoute(project, 'seedance')} title={!hasTask ? '需 Script Task' : ''}>Seedance</ActionButton>
                     </ActionBar>
                   </div>
