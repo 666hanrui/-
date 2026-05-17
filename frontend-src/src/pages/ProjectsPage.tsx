@@ -177,7 +177,7 @@ export default function ProjectsPage() {
         icon={<FolderKanban size={24} />}
         eyebrow="System Console"
         title={isZh ? '项目控制台' : 'Project Console'}
-        subtitle={isZh ? '统一的数据恢复与项目流转中枢。选择项目即可无缝衔接至对应的工作阶段。' : 'Unified recovery and routing center. Select a project to resume your workspace.'}
+        subtitle={isZh ? '统一的数据恢复与项目流转中枢。选择项目即可衔接到工作流、剧本、资产、Prompt 或 Seedance。' : 'Unified recovery and routing center. Select a project to resume your workspace.'}
         actions={<ActionButton onClick={() => navigate('/')} icon={<Play size={16} />}>{isZh ? '新建工作流' : 'New Workflow'}</ActionButton>}
       />
 
@@ -199,6 +199,7 @@ export default function ProjectsPage() {
             const hasTask = Boolean(taskId);
             const shortProjectId = project.projectId ? project.projectId.split('-')[0] : 'N/A';
             const shortTaskId = taskId ? taskId.split('-')[0] : 'N/A';
+            const isWorkflowProject = project.source === 'screenplay';
 
             return (
               <Panel
@@ -212,7 +213,7 @@ export default function ProjectsPage() {
                 ) : project.projectName}
                 subtitle={!isRenaming && (
                   <div className="flex items-center gap-2 mt-1.5 text-xs">
-                    <span className={`px-2 py-0.5 rounded font-mono ${project.source === 'screenplay' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-cyan-500/20 text-cyan-300'}`}>{project.source === 'screenplay' ? 'WORKFLOW' : 'SQLITE'}</span>
+                    <span className={`px-2 py-0.5 rounded font-mono ${project.source === 'screenplay' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-cyan-500/20 text-cyan-300'}`}>{project.source === 'screenplay' ? 'WORKFLOW' : 'SQLITE / TASK'}</span>
                     <span className="flex items-center gap-1 text-white/40"><Clock size={10} /> {project.latestDate ? new Date(project.latestDate).toLocaleString() : 'N/A'}</span>
                   </div>
                 )}
@@ -227,20 +228,20 @@ export default function ProjectsPage() {
                   <ContextMetricGrid metrics={[
                     { label: 'Project ID', value: shortProjectId, copyable: project.source === 'screenplay' ? project.projectId : undefined, isMono: true },
                     { label: 'Script Task ID', value: shortTaskId, copyable: taskId || undefined, isMono: true },
-                    { label: isZh ? '工作流进度' : 'WF Stage', value: project.source === 'screenplay' ? project.status : 'N/A' },
+                    { label: isZh ? '工作流进度' : 'WF Stage', value: project.source === 'screenplay' ? project.status : '非工作流项目' },
                     { label: isZh ? '任务状态' : 'Task Status', value: hasTask ? (isZh ? '已就绪' : 'Ready') : (isZh ? '未绑定' : 'Pending') },
                   ]} />
 
                   <div className="flex flex-col gap-3">
-                    <div className="text-xs font-bold text-white/50 tracking-widest uppercase border-b border-white/5 pb-2 mb-1">{isZh ? '工作区路由分发' : 'Workspace Routing'}</div>
+                    <div className="text-xs font-bold text-white/50 tracking-widest uppercase border-b border-white/5 pb-2 mb-1">{isZh ? '恢复入口' : 'Recovery Entrypoints'}</div>
                     <ActionBar className="flex-wrap" align="left">
-                      <ActionButton size="sm" variant={project.source === 'screenplay' ? 'secondary' : 'ghost'} disabled={project.source !== 'screenplay'} icon={<Play size={14} />} onClick={() => handleRoute(project, 'workflow')} title={project.source !== 'screenplay' ? '仅支持 Workflow 项目' : ''}>工作流 (WF)</ActionButton>
+                      <ActionButton size="sm" variant={isWorkflowProject ? 'primary' : 'ghost'} disabled={!isWorkflowProject} icon={<Play size={14} />} onClick={() => handleRoute(project, 'workflow')} title={!isWorkflowProject ? '这不是 WORKFLOW 项目，不能恢复 Step 1-8' : '恢复 Step 1-8 八步工作流'}>恢复八步工作流</ActionButton>
                       <div className="w-px h-6 bg-white/10 mx-1" />
-                      <ActionButton size="sm" variant={hasTask ? 'primary' : 'secondary'} icon={<FileText size={14} />} onClick={() => handleRoute(project, 'scripts')}>剧本任务 (Scripts)</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Library size={14} />} onClick={() => handleRoute(project, 'assets')} title={!hasTask ? '需 TaskId' : ''}>资产 (Assets)</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<ImageIcon size={14} />} onClick={() => handleRoute(project, 'image')} title={!hasTask ? '需 TaskId' : ''}>图像 (Image)</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Film size={14} />} onClick={() => handleRoute(project, 'video')} title={!hasTask ? '需 TaskId' : ''}>视频 (Video)</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Clapperboard size={14} />} onClick={() => handleRoute(project, 'seedance')} title={!hasTask ? '需 TaskId' : ''}>Seedance</ActionButton>
+                      <ActionButton size="sm" variant={hasTask ? 'primary' : 'secondary'} icon={<FileText size={14} />} onClick={() => handleRoute(project, 'scripts')}>剧本任务</ActionButton>
+                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Library size={14} />} onClick={() => handleRoute(project, 'assets')} title={!hasTask ? '需 Script Task' : ''}>资产</ActionButton>
+                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<ImageIcon size={14} />} onClick={() => handleRoute(project, 'image')} title={!hasTask ? '需 Script Task' : ''}>图像</ActionButton>
+                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Film size={14} />} onClick={() => handleRoute(project, 'video')} title={!hasTask ? '需 Script Task' : ''}>视频</ActionButton>
+                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Clapperboard size={14} />} onClick={() => handleRoute(project, 'seedance')} title={!hasTask ? '需 Script Task' : ''}>Seedance</ActionButton>
                     </ActionBar>
                   </div>
                 </div>
