@@ -16,6 +16,7 @@ export default function ContextStatusBar() {
     '/assets': isZh ? '资产矩阵' : 'Assets Forge',
     '/image': isZh ? '图像工作台' : 'Image PromptLab',
     '/video': isZh ? '视频工作台' : 'Video PromptLab',
+    '/frame-prompt': isZh ? '逐镜提示词' : 'Frame PromptLab',
     '/seedance': isZh ? 'Seedance V5' : 'Seedance',
     '/projects': isZh ? '项目控制台' : 'Project Console',
     '/settings': isZh ? '核心设置' : 'Settings',
