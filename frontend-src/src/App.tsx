@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import AuthModal from "./components/AuthModal";
 import RouteGuard from "./components/router/RouteGuard";
@@ -15,7 +15,7 @@ import Settings from "./pages/Settings";
 
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthModal />
       <Routes>
         <Route path="/" element={<MainLayout />}>
@@ -31,7 +31,7 @@ function App() {
           <Route path="seedance" element={<RouteGuard requireTaskId><SeedancePage /></RouteGuard>} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
