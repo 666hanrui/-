@@ -72,6 +72,7 @@ pub struct VersionEntry {
     pub label: Option<String>,
     #[serde(default)]
     pub output: Option<String>,
+    #[serde(default)]
     pub structured: Option<serde_json::Value>,
     #[serde(alias = "user_feedback", default)]
     pub user_feedback: Option<String>,
@@ -219,6 +220,14 @@ impl ProjectRecord {
                         let version_count: usize = steps
                             .map(|map| map.values().filter_map(|bucket| bucket["versions"].as_array()).map(|v| v.len()).sum())
                             .unwrap_or(0);
+                        let active_version_count: usize = steps
+                            .map(|map| {
+                                map.values()
+                                    .filter_map(|bucket| bucket["versions"].as_array())
+                                    .map(|versions| versions.iter().filter(|v| v["isActive"].as_bool().or_else(|| v["is_active"].as_bool()).unwrap_or(false)).count())
+                                    .sum()
+                            })
+                            .unwrap_or(0);
                         let status = if linked_task.is_some() {
                             "finalized"
                         } else if current_step >= 8 {
@@ -239,7 +248,7 @@ impl ProjectRecord {
                             "status": status,
                             "taskCount": if linked_task.is_some() { 1 } else { 0 },
                             "versionCount": version_count,
-                            "activeVersionCount": 0,
+                            "activeVersionCount": active_version_count,
                         }));
                     }
                 }
@@ -328,4 +337,92 @@ pub fn set_active_version(project_id: &str, step_number: u8, version_id: &str) {
         for v in &mut bucket.versions { v.is_active = v.id == version_id; }
     }
     rec.save();
+}
+
+pub fn get_active_version(project_id: &str, step_number: u8) -> Option<VersionEntry> {
+    let rec = load_project(project_id)?;
+    let bucket = rec.steps.get(&step_number.to_string())?;
+    let active = bucket.versions.iter().find(|v| v.is_active);
+    Some(active.cloned().unwrap_or_else(|| bucket.versions.last().cloned().unwrap()))
+}
+
+pub fn list_versions(project_id: &str, step_number: u8) -> Vec<VersionEntry> {
+    load_project(project_id).and_then(|rec| rec.steps.get(&step_number.to_string()).cloned()).map(|b| b.versions).unwrap_or_default()
+}
+
+pub fn set_step_selection(project_id: &str, step_number: u8, selection_id: Option<String>) {
+    let mut rec = load_project(project_id).expect("Project not found");
+    if let Some(sid) = selection_id { rec.selections.insert(step_number.to_string(), sid); } else { rec.selections.remove(&step_number.to_string()); }
+    rec.save();
+}
+
+pub fn save_selfcheck(project_id: &str, step_number: u8, items: Vec<serde_json::Value>) {
+    let mut rec = load_project(project_id).expect("Project not found");
+    rec.selfchecks.insert(step_number.to_string(), SelfcheckData { items, created_at: now() });
+    rec.save();
+}
+
+pub fn get_selfcheck(project_id: &str, step_number: u8) -> Option<SelfcheckData> {
+    load_project(project_id).and_then(|rec| rec.selfchecks.get(&step_number.to_string()).cloned())
+}
+
+pub fn save_checkpoint(project_id: &str, trigger: &str, content: &str) -> bool {
+    let mut rec = match load_project(project_id) { Some(r) => r, None => return false };
+    rec.checkpoints.insert(trigger.to_string(), content.to_string());
+    rec.save();
+    true
+}
+
+pub fn get_checkpoint(project_id: &str, trigger: &str) -> Option<String> {
+    load_project(project_id).and_then(|rec| rec.checkpoints.get(trigger).cloned())
+}
+
+pub fn set_linked_script_task_id(project_id: &str, task_id: &str) {
+    let mut rec = load_project(project_id).expect("Project not found");
+    rec.linked_script_task_id = Some(task_id.to_string());
+    rec.save();
+}
+
+pub fn build_project_snapshot(project_id: &str) -> serde_json::Value {
+    let rec = match load_project(project_id) {
+        Some(r) => r,
+        None => return serde_json::json!({"steps":{}, "selections":{}, "checkpoints":{}}),
+    };
+    let mut steps = serde_json::json!({});
+    for n in 1..=8 {
+        if let Some(version) = get_active_version(project_id, n) {
+            let mut step_value = serde_json::json!({});
+            if let Some(structured) = version.structured { step_value["structured"] = structured; }
+            if let Some(output) = version.output.as_deref() { step_value["outputPreview"] = serde_json::Value::String(truncate_chars(output, 3000)); }
+            if step_value.as_object().map(|o| !o.is_empty()).unwrap_or(false) { steps[&n.to_string()] = step_value; }
+        }
+    }
+    let ckpt = rec.checkpoints.get("after-step-6").map(|s| truncate_chars(s, 3000)).unwrap_or_default();
+    let mut checkpoints = serde_json::json!({});
+    if !ckpt.is_empty() { checkpoints["after-step-6"] = serde_json::Value::String(ckpt); }
+    serde_json::json!({ "steps": steps, "selections": rec.selections, "checkpoints": checkpoints })
+}
+
+pub fn update_active_step_structured(project_id: &str, step_number: u8, structured: serde_json::Value) -> bool {
+    let mut rec = match load_project(project_id) { Some(r) => r, None => return false };
+    let bucket = match rec.steps.get_mut(&step_number.to_string()) { Some(b) => b, None => return false };
+    let idx = bucket.versions.iter().position(|v| v.is_active).unwrap_or_else(|| bucket.versions.len().wrapping_sub(1));
+    let active = match bucket.versions.get_mut(idx) { Some(v) => v, None => return false };
+
+    if let Some(manual_output) = structured.get("_manualOutput").and_then(|v| v.as_str()) {
+        active.output = Some(manual_output.to_string());
+        let parsed = crate::utils::step_parser::parse_step_output(step_number, manual_output);
+        let fallback = structured.as_object().map(|obj| {
+            let mut next = obj.clone();
+            next.remove("_manualOutput");
+            serde_json::Value::Object(next)
+        });
+        active.structured = parsed.or(fallback);
+        active.label = Some("手动覆写".into());
+    } else {
+        active.structured = Some(structured);
+    }
+
+    rec.save();
+    true
 }
