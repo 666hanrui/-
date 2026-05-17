@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FolderKanban, Trash2, Edit2, Play, FileText, Library, Image as ImageIcon, Film, Clapperboard, Clock, Loader2, Check, X } from 'lucide-react';
 import { useTudouBridge } from '../hooks/useTudouBridge';
@@ -21,7 +21,29 @@ interface ArchiveProject {
   tasks: any[];
   source: 'screenplay' | 'sqlite';
   raw: any;
+  currentStep: number | null;
+  doneSteps: number[];
+  linkedScriptTaskId: string | null;
+  versionCount: number;
+  activeVersionCount: number;
 }
+
+const toNumber = (value: any, fallback: number | null = null) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : fallback;
+};
+
+const normalizeDoneSteps = (value: any): number[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => Number(item)).filter((item) => Number.isFinite(item));
+};
+
+const workflowStatusLabel = (status: string, isZh: boolean) => {
+  if (status === 'finalized') return isZh ? '已成稿' : 'Finalized';
+  if (status === 'ready_to_finalize') return isZh ? '待成稿' : 'Ready';
+  if (status === 'in_progress') return isZh ? '推进中' : 'In Progress';
+  return status || (isZh ? '未知' : 'Unknown');
+};
 
 export default function ProjectsPage() {
   const { invoke } = useTudouBridge();
@@ -37,6 +59,8 @@ export default function ProjectsPage() {
   const taskIdOf = (task: any) => task?.taskId || task?.task_id || task?.id || '';
 
   const primaryScriptTask = (project: ArchiveProject) => {
+    if (project.linkedScriptTaskId) return project.linkedScriptTaskId;
+
     const direct = project.raw?.scriptTaskId || project.raw?.script_task_id || project.raw?.linkedScriptTaskId || project.raw?.linked_script_task_id;
     if (direct) return direct;
 
@@ -50,6 +74,8 @@ export default function ProjectsPage() {
 
   const normalizeSqliteProject = (project: any): ArchiveProject => {
     const projectId = project.projectId || project.project_id || project.id || '';
+    const linkedScriptTaskId = project.scriptTaskId || project.script_task_id || project.linkedScriptTaskId || project.linked_script_task_id || null;
+    const doneSteps = normalizeDoneSteps(project.doneSteps || project.done_steps);
     return {
       projectId,
       projectName: project.projectName || project.project_name || project.name || projectId,
@@ -60,6 +86,11 @@ export default function ProjectsPage() {
       tasks: Array.isArray(project.tasks) ? project.tasks : [],
       source: 'sqlite',
       raw: project,
+      currentStep: toNumber(project.currentStep || project.current_step, null),
+      doneSteps,
+      linkedScriptTaskId,
+      versionCount: toNumber(project.versionCount || project.version_count, 0) || 0,
+      activeVersionCount: toNumber(project.activeVersionCount || project.active_version_count, 0) || 0,
     };
   };
 
@@ -68,18 +99,26 @@ export default function ProjectsPage() {
     const projectId = summary.projectId || summary.project_id || summary.id;
     if (!projectId) return null;
 
-    const linkedTaskId = summary.scriptTaskId || summary.script_task_id || summary.linkedScriptTaskId || summary.linked_script_task_id;
+    const linkedTaskId = summary.scriptTaskId || summary.script_task_id || summary.linkedScriptTaskId || summary.linked_script_task_id || null;
+    const currentStep = toNumber(summary.currentStep || summary.current_step, 1) || 1;
+    const doneSteps = normalizeDoneSteps(summary.doneSteps || summary.done_steps);
+    const status = summary.status || (linkedTaskId ? 'finalized' : currentStep >= 8 ? 'ready_to_finalize' : 'in_progress');
 
     return {
       projectId,
       projectName: init.name || summary.name || init.concept || summary.concept || projectId,
       moduleType: 'workflow',
-      status: summary.currentStep || summary.current_step ? `Step ${summary.currentStep || summary.current_step}` : 'workflow',
+      status,
       latestDate: String(summary.updatedAt || summary.updated_at || ''),
-      taskCount: linkedTaskId ? 1 : 0,
+      taskCount: toNumber(summary.taskCount || summary.task_count, linkedTaskId ? 1 : 0) || 0,
       tasks: linkedTaskId ? [{ taskId: linkedTaskId, moduleType: 'script', stage: 'workflow-finalized', mode: 'workflow', updatedAt: summary.updatedAt || summary.updated_at }] : [],
       source: 'screenplay',
       raw: summary,
+      currentStep,
+      doneSteps,
+      linkedScriptTaskId: linkedTaskId,
+      versionCount: toNumber(summary.versionCount || summary.version_count, 0) || 0,
+      activeVersionCount: toNumber(summary.activeVersionCount || summary.active_version_count, 0) || 0,
     };
   };
 
@@ -151,7 +190,7 @@ export default function ProjectsPage() {
     setCurrentProjectId(project.projectId);
     const init = project.raw?.init || {};
     setScriptSeed(init.concept || init.name || project.projectName);
-    setCurrentStep(Math.max(0, Number(project.raw?.currentStep || project.raw?.current_step || 1) - 1));
+    setCurrentStep(Math.max(0, Number(project.currentStep || 1) - 1));
     const taskId = primaryScriptTask(project);
     setCurrentTaskId(taskId ? taskId : null);
     navigate('/workflow');
@@ -200,6 +239,9 @@ export default function ProjectsPage() {
             const shortProjectId = project.projectId ? project.projectId.split('-')[0] : 'N/A';
             const shortTaskId = taskId ? taskId.split('-')[0] : 'N/A';
             const isWorkflowProject = project.source === 'screenplay';
+            const doneCount = project.doneSteps.length;
+            const stepText = project.currentStep ? `Step ${project.currentStep}/8` : 'N/A';
+            const progressPercent = project.currentStep ? Math.min(100, Math.max(0, (project.currentStep / 8) * 100)) : 0;
 
             return (
               <Panel
@@ -214,6 +256,7 @@ export default function ProjectsPage() {
                 subtitle={!isRenaming && (
                   <div className="flex items-center gap-2 mt-1.5 text-xs">
                     <span className={`px-2 py-0.5 rounded font-mono ${project.source === 'screenplay' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-cyan-500/20 text-cyan-300'}`}>{project.source === 'screenplay' ? 'WORKFLOW' : 'SQLITE / TASK'}</span>
+                    <span className="px-2 py-0.5 rounded bg-white/[0.04] text-white/45 font-mono">{workflowStatusLabel(project.status, isZh)}</span>
                     <span className="flex items-center gap-1 text-white/40"><Clock size={10} /> {project.latestDate ? new Date(project.latestDate).toLocaleString() : 'N/A'}</span>
                   </div>
                 )}
@@ -228,9 +271,26 @@ export default function ProjectsPage() {
                   <ContextMetricGrid metrics={[
                     { label: 'Project ID', value: shortProjectId, copyable: project.source === 'screenplay' ? project.projectId : undefined, isMono: true },
                     { label: 'Script Task ID', value: shortTaskId, copyable: taskId || undefined, isMono: true },
-                    { label: isZh ? '工作流进度' : 'WF Stage', value: project.source === 'screenplay' ? project.status : '非工作流项目' },
-                    { label: isZh ? '任务状态' : 'Task Status', value: hasTask ? (isZh ? '已就绪' : 'Ready') : (isZh ? '未绑定' : 'Pending') },
+                    { label: isZh ? '工作流进度' : 'WF Stage', value: isWorkflowProject ? stepText : '非工作流项目' },
+                    { label: isZh ? '完成步骤' : 'Done', value: isWorkflowProject ? `${doneCount}/8` : 'N/A' },
                   ]} />
+
+                  {isWorkflowProject && (
+                    <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4 space-y-3">
+                      <div className="flex items-center justify-between text-xs text-white/50">
+                        <span>{isZh ? '真实工作流恢复状态' : 'Workflow recovery state'}</span>
+                        <span className="font-mono">{stepText} · done {doneCount}/8 · versions {project.versionCount}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                        <div className="h-full rounded-full bg-indigo-400/70 transition-all" style={{ width: `${progressPercent}%` }} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px] text-white/40 font-mono">
+                        <span>status: {project.status}</span>
+                        <span>versions: {project.versionCount}</span>
+                        <span>active: {project.activeVersionCount}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-3">
                     <div className="text-xs font-bold text-white/50 tracking-widest uppercase border-b border-white/5 pb-2 mb-1">{isZh ? '恢复入口' : 'Recovery Entrypoints'}</div>
