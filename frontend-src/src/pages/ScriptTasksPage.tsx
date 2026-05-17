@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Boxes, CheckCircle2, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, RefreshCw, Save, SearchCheck, Upload, Wand2 } from 'lucide-react';
+import { Boxes, CheckCircle2, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Layers3, Loader2, RefreshCw, Save, SearchCheck, Upload, Wand2 } from 'lucide-react';
 import { useTudouBridge } from '../hooks/useTudouBridge';
 import { formatDate, getProjectId, getProjectName, getScriptText, getTaskId, getUpdatedAt } from '../lib/format';
 import { useAppStore } from '../store/useAppStore';
@@ -308,13 +308,14 @@ export default function ScriptTasksPage() {
         icon={<FileText size={24} />}
         eyebrow="Script Recovery Console"
         title="剧本任务 / 验收工作台"
-        subtitle="工作流 finalize、直接生成、导入已有剧本都会汇聚成同一种 script task，并承接资产、图像、视频和 Seedance。"
+        subtitle="工作流 finalize、直接生成、导入已有剧本都会汇聚成同一种 script task，并承接资产、图像、视频、逐镜提示词和 Seedance。"
         actions={
           <ActionBar align="right" className="flex-wrap">
             <ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton>
             <ActionButton variant="secondary" onClick={() => goNext('/assets')} disabled={!selectedTaskId} icon={<Boxes size={16} />}>资产</ActionButton>
             <ActionButton variant="secondary" onClick={() => goNext('/image')} disabled={!selectedTaskId} icon={<ImageIcon size={16} />}>图像</ActionButton>
             <ActionButton variant="secondary" onClick={() => goNext('/video')} disabled={!selectedTaskId} icon={<Film size={16} />}>视频</ActionButton>
+            <ActionButton variant="secondary" onClick={() => goNext('/frame-prompt')} disabled={!selectedTaskId} icon={<Layers3 size={16} />}>逐镜</ActionButton>
             <ActionButton variant="secondary" onClick={() => goNext('/seedance')} disabled={!selectedTaskId} icon={<Clapperboard size={16} />}>Seedance</ActionButton>
           </ActionBar>
         }
@@ -356,6 +357,7 @@ export default function ScriptTasksPage() {
               <ActionButton size="sm" variant="secondary" onClick={() => goNext('/assets')} disabled={!selectedTaskId} icon={<Boxes size={14} />}>资产</ActionButton>
               <ActionButton size="sm" variant="secondary" onClick={() => goNext('/image')} disabled={!selectedTaskId} icon={<ImageIcon size={14} />}>图像</ActionButton>
               <ActionButton size="sm" variant="secondary" onClick={() => goNext('/video')} disabled={!selectedTaskId} icon={<Film size={14} />}>视频</ActionButton>
+              <ActionButton size="sm" variant="secondary" onClick={() => goNext('/frame-prompt')} disabled={!selectedTaskId} icon={<Layers3 size={14} />}>逐镜</ActionButton>
               <ActionButton size="sm" variant="secondary" onClick={() => goNext('/seedance')} disabled={!selectedTaskId} icon={<Clapperboard size={14} />}>Seedance</ActionButton>
             </ActionBar>
           </Panel>
