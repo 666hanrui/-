@@ -8,6 +8,7 @@ import WorkflowValley from "./pages/WorkflowValley";
 import ScriptTasksPage from "./pages/ScriptTasksPage";
 import AssetsForge from "./pages/AssetsForge";
 import PromptLab from "./pages/PromptLab";
+import FramePromptLab from "./pages/FramePromptLab";
 import SeedancePage from "./pages/SeedancePage";
 import ProjectsPage from "./pages/ProjectsPage";
 import Settings from "./pages/Settings";
@@ -26,6 +27,7 @@ function App() {
           <Route path="assets" element={<RouteGuard requireTaskId><AssetsForge /></RouteGuard>} />
           <Route path="image" element={<RouteGuard requireTaskId><PromptLab kind="image" /></RouteGuard>} />
           <Route path="video" element={<RouteGuard requireTaskId><PromptLab kind="video" /></RouteGuard>} />
+          <Route path="frame-prompt" element={<RouteGuard requireTaskId><FramePromptLab /></RouteGuard>} />
           <Route path="seedance" element={<RouteGuard requireTaskId><SeedancePage /></RouteGuard>} />
         </Route>
       </Routes>
