@@ -22,7 +22,7 @@ function App() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="scripts" element={<ScriptTasksPage />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="workflow" element={<RouteGuard requireProjectId><WorkflowValley /></RouteGuard>} />
+          <Route path="workflow" element={<WorkflowValley />} />
           <Route path="assets" element={<RouteGuard requireTaskId><AssetsForge /></RouteGuard>} />
           <Route path="image" element={<RouteGuard requireTaskId><PromptLab kind="image" /></RouteGuard>} />
           <Route path="video" element={<RouteGuard requireTaskId><PromptLab kind="video" /></RouteGuard>} />
