@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Boxes, CheckCircle2, Circle, FileText, FolderKanban, Loader2, Stethoscope, Wand2 } from 'lucide-react';
+import { AlertTriangle, Boxes, CheckCircle2, Circle, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Loader2, Stethoscope, Wand2 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import StepEngine from '../components/workflow/StepEngine';
 import AiDoctorPanel from '../components/workflow/AiDoctorPanel';
@@ -20,6 +20,7 @@ const asProject = (project?: ProjectRecord | null) => (project || {}) as any;
 const projectIdOf = (project: ProjectRecord | null | undefined, fallback = '') => asProject(project).projectId || asProject(project).project_id || fallback;
 const linkedTaskIdOf = (project: ProjectRecord | null | undefined) => asProject(project).linkedScriptTaskId || asProject(project).linked_script_task_id || null;
 const backendStepOf = (project: ProjectRecord | null | undefined, fallback = 1) => Number(asProject(project).currentStep || asProject(project).current_step || fallback);
+const shortId = (value?: string | null) => value ? value.split('-')[0] : 'N/A';
 
 export default function WorkflowValley() {
   const {
@@ -127,6 +128,28 @@ export default function WorkflowValley() {
               <ActionButton variant="secondary" onClick={() => navigate('/')} icon={<Wand2 size={16} />}>返回枢纽新建项目</ActionButton>
               <ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>进入剧本任务页</ActionButton>
               <ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!currentTaskId} icon={<Boxes size={16} />}>使用当前剧本任务进入资产</ActionButton>
+            </ActionBar>
+          </div>
+        </Panel>
+      </PageShell>
+    );
+  }
+
+  if (!currentProjectId && currentTaskId) {
+    return (
+      <PageShell maxWidth="max-w-5xl">
+        <Panel title="已选择剧本任务，但没有工作流项目" subtitle="Task Handoff" actions={<FileText size={18} className="text-cyan-300" />}>
+          <div className="space-y-6">
+            <p className="text-white/60 text-sm leading-6">当前页面已经接收到 Script Task，但八步工作流只能恢复 screenplay 工作流项目。这个任务可以继续进入剧本、资产、图像、视频和 Seedance；如果要恢复 Step 1-8，请在项目库选择 WORKFLOW 类型项目。</p>
+            <ContextMetricGrid metrics={[{ label: 'Script Task', value: shortId(currentTaskId), copyable: currentTaskId, isMono: true }, { label: 'Project', value: '未绑定工作流项目' }, { label: '推荐入口', value: '后期链路' }, { label: 'Workflow', value: '需 WORKFLOW 项目' }]} />
+            <ActionBar className="flex-wrap">
+              <ActionButton onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>进入剧本任务</ActionButton>
+              <ActionButton variant="secondary" onClick={() => navigate('/assets')} icon={<Boxes size={16} />}>资产</ActionButton>
+              <ActionButton variant="secondary" onClick={() => navigate('/image')} icon={<ImageIcon size={16} />}>图像</ActionButton>
+              <ActionButton variant="secondary" onClick={() => navigate('/video')} icon={<Film size={16} />}>视频</ActionButton>
+              <ActionButton variant="secondary" onClick={() => navigate('/seedance')} icon={<Clapperboard size={16} />}>Seedance</ActionButton>
+              <ActionButton variant="ghost" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>去项目库找 WORKFLOW</ActionButton>
+              <ActionButton variant="ghost" onClick={() => navigate('/')} icon={<Wand2 size={16} />}>新建工作流</ActionButton>
             </ActionBar>
           </div>
         </Panel>
