@@ -17,6 +17,13 @@ import FormField, { TextArea, TextInput } from '../components/ui/FormField';
 import ResultViewer from '../components/ui/ResultViewer';
 
 type AssetTab = 'characters' | 'scenes' | 'props';
+type ExtractionMeta = {
+  extractionMode: string;
+  extractionModel: string;
+  configReady: boolean | null;
+  fallbackUsed: boolean | null;
+  llmUsed: boolean | null;
+} | null;
 
 const FIELD_MAP: Record<AssetTab, string[]> = {
   characters: ['name', 'appearance', 'clothing', 'personality', 'visualAnchor', 'aiPrompt'],
@@ -44,12 +51,31 @@ function eventLine(eventName: string, payload: any) {
   return `${eventName}:${count}${model}${msg ? ` ${msg}` : ''}`;
 }
 
+function modeLabel(mode?: string) {
+  if (mode === 'llm') return '模型扫描';
+  if (mode === 'mixed') return '混合扫描';
+  if (mode === 'fallback') return 'Fallback 扫描';
+  return '未扫描';
+}
+
+function metaFromResult(result: any): ExtractionMeta {
+  if (!result || typeof result !== 'object') return null;
+  return {
+    extractionMode: result.extractionMode || (result.fallbackUsed ? 'fallback' : result.llmUsed ? 'llm' : ''),
+    extractionModel: result.extractionModel || '',
+    configReady: typeof result.configReady === 'boolean' ? result.configReady : null,
+    fallbackUsed: typeof result.fallbackUsed === 'boolean' ? result.fallbackUsed : null,
+    llmUsed: typeof result.llmUsed === 'boolean' ? result.llmUsed : null,
+  };
+}
+
 export default function AssetsForge() {
   const { setRealm, currentTaskId, setCurrentTaskId, currentProjectId } = useAppStore();
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AssetTab>('characters');
   const [assets, setAssets] = useState<AssetBundle>(EMPTY);
+  const [extractionMeta, setExtractionMeta] = useState<ExtractionMeta>(null);
   const [progress, setProgress] = useState<string[]>([]);
   const [busy, setBusy] = useState<'load' | 'extract' | 'save' | ''>('');
   const [error, setError] = useState('');
@@ -92,6 +118,7 @@ export default function AssetsForge() {
   }), [assets]);
 
   const totalAssets = counts.characters + counts.scenes + counts.props;
+  const scanMode = extractionMeta?.extractionMode || '';
   const currentStatus = busy === 'extract' ? '扫描中' : busy === 'save' ? '保存中' : busy === 'load' ? '读取中' : totalAssets > 0 ? '已有资产' : '待扫描';
 
   async function loadAssets(taskId = currentTaskId || '') {
@@ -112,6 +139,7 @@ export default function AssetsForge() {
     const taskId = pickTaskId(task);
     if (!taskId) return;
     setCurrentTaskId(taskId);
+    setExtractionMeta(null);
     await loadAssets(taskId);
   }
 
@@ -122,9 +150,15 @@ export default function AssetsForge() {
     }
     setBusy('extract');
     setError('');
+    setExtractionMeta(null);
     setProgress(['asset:scan-start pending']);
     try {
       const result = await invoke<any>('asset/extract', { taskId: currentTaskId }, { timeout: 900000 });
+      const meta = metaFromResult(result);
+      setExtractionMeta(meta);
+      if (meta) {
+        setProgress((prev) => [`asset:scan-summary mode=${meta.extractionMode || 'unknown'} configReady=${meta.configReady} fallback=${meta.fallbackUsed} llm=${meta.llmUsed}`, ...prev].slice(0, 100));
+      }
       if (result?.characters || result?.scenes || result?.props) setAssets(normalizeAssets(result));
       await loadAssets(currentTaskId);
     } catch (err: any) {
@@ -188,7 +222,7 @@ export default function AssetsForge() {
         { label: 'Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true },
         { label: 'Script Task', value: currentTaskId || '未选择', copyable: currentTaskId || undefined, isMono: true },
         { label: '资产总数', value: `${totalAssets}` },
-        { label: '当前状态', value: currentStatus },
+        { label: '扫描模式', value: modeLabel(scanMode) },
       ]} />
 
       {!currentTaskId && <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 text-yellow-100 text-sm">没有有效 script task。请从项目库选择已成稿任务，或先在工作流 Step 8 finalize。</div>}
@@ -208,6 +242,22 @@ export default function AssetsForge() {
               <MiniStat label="场景" value={counts.scenes} />
               <MiniStat label="道具" value={counts.props} />
             </div>
+            {extractionMeta && (
+              <div className={`mb-5 rounded-2xl border p-4 text-sm ${extractionMeta.extractionMode === 'fallback' ? 'border-yellow-500/20 bg-yellow-500/10 text-yellow-100' : extractionMeta.extractionMode === 'mixed' ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'}`}>
+                <div className="font-bold mb-2">{modeLabel(extractionMeta.extractionMode)}</div>
+                <div className="space-y-1 text-xs opacity-80 font-mono break-all">
+                  <div>configReady: {String(extractionMeta.configReady)}</div>
+                  <div>fallbackUsed: {String(extractionMeta.fallbackUsed)}</div>
+                  <div>llmUsed: {String(extractionMeta.llmUsed)}</div>
+                  <div>model: {extractionMeta.extractionModel || 'N/A'}</div>
+                </div>
+              </div>
+            )}
+            {!extractionMeta && totalAssets > 0 && (
+              <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white/45 text-sm">
+                当前资产来自历史记录。重新扫描后会显示本次 extractionMode / fallbackUsed / llmUsed。
+              </div>
+            )}
             <ActionBar className="flex-col items-stretch">
               <ActionButton onClick={extractAssets} disabled={!currentTaskId || busy === 'extract'} isLoading={busy === 'extract'} icon={<RefreshCw size={16} />}>扫描剧本资产</ActionButton>
               <ActionButton variant="secondary" onClick={() => currentTaskId && loadAssets(currentTaskId)} disabled={!currentTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>重新读取资产</ActionButton>
