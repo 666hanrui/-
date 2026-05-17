@@ -51,6 +51,20 @@ function outlineTotal(outline: any) {
   return Number.isFinite(n) && n > 0 ? n : outlineShots(outline).length;
 }
 
+function groupSceneIndex(group: any, fallback: number) {
+  const direct = group?.sceneIndex ?? group?.scene_index;
+  if (direct !== undefined && direct !== null) {
+    const n = Number(direct);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  const shotNumber = group?.shotNumber ?? group?.shot_number;
+  if (shotNumber !== undefined && shotNumber !== null) {
+    const n = Number(shotNumber);
+    return Number.isFinite(n) ? n - 1 : fallback;
+  }
+  return fallback;
+}
+
 export default function FramePromptLab() {
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
@@ -79,7 +93,7 @@ export default function FramePromptLab() {
   const seedanceGroups = useMemo(() => outputSeedanceGroups(output), [output]);
   const gridGroups = useMemo(() => outputGridGroups(output), [output]);
   const activeShot = shots[activeSceneIndex] || null;
-  const activeGroup = seedanceGroups.find((group: any) => Number(group?.sceneIndex ?? group?.scene_index ?? group?.shotNumber - 1 ?? 0) === activeSceneIndex) || seedanceGroups[activeSceneIndex] || null;
+  const activeGroup = seedanceGroups.find((group: any, index: number) => groupSceneIndex(group, index) === activeSceneIndex) || seedanceGroups[activeSceneIndex] || null;
 
   const refreshAll = async (taskId = selectedTaskId) => {
     if (!taskId) return;
