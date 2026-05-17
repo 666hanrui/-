@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Activity, Boxes, CheckCircle2, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Layers3, Loader2, RefreshCw, Save, Wand2 } from 'lucide-react';
+import { Activity, Boxes, CheckCircle2, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Layers3, RefreshCw, Save, Wand2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
 import { useTudouBridge } from '../hooks/useTudouBridge';
