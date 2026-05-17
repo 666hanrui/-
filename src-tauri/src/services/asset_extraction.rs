@@ -42,48 +42,72 @@ fn parse_asset_list(raw: &str, label: &str) -> Result<Vec<serde_json::Value>, St
         .map_err(|e| format!("{} JSON 解析失败: {}", label, e))
 }
 
+fn string_field(raw: &serde_json::Value, key: &str, fallback: &str) -> String {
+    raw.get(key).and_then(|v| v.as_str()).unwrap_or(fallback).to_string()
+}
+
+fn ensure_string(obj: &mut serde_json::Map<String, serde_json::Value>, key: &str, fallback: &str) {
+    let should_fill = obj.get(key).and_then(|v| v.as_str()).map(|s| s.trim().is_empty()).unwrap_or(true);
+    if should_fill {
+        obj.insert(key.to_string(), json!(fallback));
+    }
+}
+
+fn ensure_array(obj: &mut serde_json::Map<String, serde_json::Value>, key: &str) {
+    if !obj.get(key).map(|v| v.is_array()).unwrap_or(false) {
+        obj.insert(key.to_string(), json!([]));
+    }
+}
+
+fn object_with_raw(raw: &serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+    raw.as_object().cloned().unwrap_or_default()
+}
+
 fn normalize_character(raw: &serde_json::Value) -> serde_json::Value {
-    json!({
-        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
-        "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
-        "role": raw.get("role").and_then(|v| v.as_str()).unwrap_or("Unknown"),
-        "aliases": raw.get("aliases").cloned().unwrap_or_else(|| json!([])),
-        "appearance": raw.get("appearance").and_then(|v| v.as_str()).unwrap_or(""),
-        "clothing": raw.get("clothing").and_then(|v| v.as_str()).unwrap_or(""),
-        "personality": raw.get("personality").and_then(|v| v.as_str()).unwrap_or(""),
-        "colorPalette": raw.get("colorPalette").and_then(|v| v.as_str()).unwrap_or(""),
-        "visualAnchor": raw.get("visualAnchor").and_then(|v| v.as_str()).unwrap_or(""),
-        "aiPrompt": raw.get("aiPrompt").and_then(|v| v.as_str()).unwrap_or(""),
-    })
+    let mut obj = object_with_raw(raw);
+    let id = raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid);
+    obj.insert("id".into(), json!(id));
+    ensure_string(&mut obj, "name", "Unknown");
+    ensure_string(&mut obj, "role", "Unknown");
+    ensure_array(&mut obj, "aliases");
+    ensure_string(&mut obj, "appearance", "");
+    ensure_string(&mut obj, "clothing", "");
+    ensure_string(&mut obj, "personality", "");
+    ensure_string(&mut obj, "colorPalette", "");
+    ensure_string(&mut obj, "visualAnchor", "");
+    ensure_string(&mut obj, "aiPrompt", "");
+    serde_json::Value::Object(obj)
 }
 
 fn normalize_scene(raw: &serde_json::Value) -> serde_json::Value {
-    json!({
-        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
-        "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
-        "aliases": raw.get("aliases").cloned().unwrap_or_else(|| json!([])),
-        "timeOfDay": raw.get("timeOfDay").and_then(|v| v.as_str()).unwrap_or(""),
-        "atmosphere": raw.get("atmosphere").and_then(|v| v.as_str()).unwrap_or(""),
-        "materials": raw.get("materials").and_then(|v| v.as_str()).unwrap_or(""),
-        "landmarks": raw.get("landmarks").and_then(|v| v.as_str()).unwrap_or(""),
-        "colorTemperature": raw.get("colorTemperature").and_then(|v| v.as_str()).unwrap_or(""),
-        "visualAnchor": raw.get("visualAnchor").and_then(|v| v.as_str()).unwrap_or(""),
-        "aiPrompt": raw.get("aiPrompt").and_then(|v| v.as_str()).unwrap_or(""),
-    })
+    let mut obj = object_with_raw(raw);
+    let id = raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid);
+    obj.insert("id".into(), json!(id));
+    ensure_string(&mut obj, "name", "Unknown");
+    ensure_array(&mut obj, "aliases");
+    ensure_string(&mut obj, "timeOfDay", "");
+    ensure_string(&mut obj, "atmosphere", "");
+    ensure_string(&mut obj, "materials", "");
+    ensure_string(&mut obj, "landmarks", "");
+    ensure_string(&mut obj, "colorTemperature", "");
+    ensure_string(&mut obj, "visualAnchor", "");
+    ensure_string(&mut obj, "aiPrompt", "");
+    serde_json::Value::Object(obj)
 }
 
 fn normalize_prop(raw: &serde_json::Value) -> serde_json::Value {
-    json!({
-        "id": raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid),
-        "name": raw.get("name").and_then(|v| v.as_str()).unwrap_or("Unknown"),
-        "aliases": raw.get("aliases").cloned().unwrap_or_else(|| json!([])),
-        "dramaticFunction": raw.get("dramaticFunction").and_then(|v| v.as_str()).unwrap_or(""),
-        "form": raw.get("form").and_then(|v| v.as_str()).unwrap_or(""),
-        "material": raw.get("material").and_then(|v| v.as_str()).unwrap_or(""),
-        "surfaceState": raw.get("surfaceState").and_then(|v| v.as_str()).unwrap_or(""),
-        "visualAnchor": raw.get("visualAnchor").and_then(|v| v.as_str()).unwrap_or(""),
-        "aiPrompt": raw.get("aiPrompt").and_then(|v| v.as_str()).unwrap_or(""),
-    })
+    let mut obj = object_with_raw(raw);
+    let id = raw.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid);
+    obj.insert("id".into(), json!(id));
+    ensure_string(&mut obj, "name", "Unknown");
+    ensure_array(&mut obj, "aliases");
+    ensure_string(&mut obj, "dramaticFunction", "");
+    ensure_string(&mut obj, "form", "");
+    ensure_string(&mut obj, "material", "");
+    ensure_string(&mut obj, "surfaceState", "");
+    ensure_string(&mut obj, "visualAnchor", "");
+    ensure_string(&mut obj, "aiPrompt", "");
+    serde_json::Value::Object(obj)
 }
 
 fn fallback_characters(text: &str) -> Vec<serde_json::Value> {
@@ -96,7 +120,7 @@ fn fallback_characters(text: &str) -> Vec<serde_json::Value> {
             continue;
         }
         seen.insert(name.to_string());
-        out.push(json!({"id": uuid(), "name": name, "role": "", "aliases": [], "appearance": "", "clothing": "", "personality": "", "colorPalette": "", "visualAnchor": "", "aiPrompt": ""}));
+        out.push(json!({"id": uuid(), "name": name, "role": "", "aliases": [], "appearance": "", "clothing": "", "personality": "", "colorPalette": "", "visualAnchor": "", "aiPrompt": "", "source": "regex-fallback"}));
     }
     out
 }
@@ -111,7 +135,7 @@ fn fallback_scenes(text: &str) -> Vec<serde_json::Value> {
             continue;
         }
         seen.insert(name.to_string());
-        out.push(json!({"id": uuid(), "name": name, "aliases": [], "timeOfDay": "", "atmosphere": "", "materials": "", "landmarks": "", "colorTemperature": "", "visualAnchor": "", "aiPrompt": ""}));
+        out.push(json!({"id": uuid(), "name": name, "aliases": [], "timeOfDay": "", "atmosphere": "", "materials": "", "landmarks": "", "colorTemperature": "", "visualAnchor": "", "aiPrompt": "", "source": "regex-fallback"}));
     }
     out
 }
@@ -187,24 +211,24 @@ struct PreparedExtraction {
     db_path: String,
     runtime_config: RuntimeConfig,
     script_body: String,
+    config_ready: bool,
 }
 
 fn prepare(conn: &Connection, task_id: &str) -> Result<PreparedExtraction, String> {
     let settings = crate::db::crud::get_app_settings(conn);
-    if settings.text_key.trim().is_empty() || settings.text_endpoint.trim().is_empty() {
-        return Err("API 未配置，无法调用资产提取提示词。请先在设置页配置文字模型。".into());
-    }
+    let config_ready = !settings.text_key.trim().is_empty() && !settings.text_endpoint.trim().is_empty();
     Ok(PreparedExtraction {
         task_id: task_id.to_string(),
         time: now(),
         db_path: db_path(conn)?,
         script_body: load_script_body(conn, task_id)?,
+        config_ready,
         runtime_config: RuntimeConfig {
             api_key: settings.text_key,
             api_base_url: settings.text_endpoint,
             default_model: settings.text_model,
             text_mode: settings.text_mode,
-            mode: "local-configured".into(),
+            mode: if config_ready { "local-configured".into() } else { "fallback-no-api".into() },
             image_endpoint: String::new(),
             image_key: String::new(),
             image_model: String::new(),
@@ -219,35 +243,68 @@ pub fn run_asset_extraction(conn: &Connection, task_id: &str) -> impl std::futur
     async move {
         let p = prepared?;
         let mut fallback_used = false;
+        let mut llm_used = false;
 
-        let characters = match extract_with_prompt(&p.runtime_config, "asset_character", &p.script_body).await {
-            Some(items) => items.iter().map(normalize_character).collect(),
-            None => {
-                let items = fallback_characters(&p.script_body);
-                if !items.is_empty() { fallback_used = true; }
-                items
+        let characters = if p.config_ready {
+            match extract_with_prompt(&p.runtime_config, "asset_character", &p.script_body).await {
+                Some(items) => {
+                    llm_used = true;
+                    items.iter().map(normalize_character).collect()
+                },
+                None => {
+                    fallback_used = true;
+                    fallback_characters(&p.script_body).iter().map(normalize_character).collect()
+                }
             }
+        } else {
+            fallback_used = true;
+            fallback_characters(&p.script_body).iter().map(normalize_character).collect()
         };
-        let scenes = match extract_with_prompt(&p.runtime_config, "asset_scene", &p.script_body).await {
-            Some(items) => items.iter().map(normalize_scene).collect(),
-            None => {
-                let items = fallback_scenes(&p.script_body);
-                if !items.is_empty() { fallback_used = true; }
-                items
+
+        let scenes = if p.config_ready {
+            match extract_with_prompt(&p.runtime_config, "asset_scene", &p.script_body).await {
+                Some(items) => {
+                    llm_used = true;
+                    items.iter().map(normalize_scene).collect()
+                },
+                None => {
+                    fallback_used = true;
+                    fallback_scenes(&p.script_body).iter().map(normalize_scene).collect()
+                }
             }
+        } else {
+            fallback_used = true;
+            fallback_scenes(&p.script_body).iter().map(normalize_scene).collect()
         };
-        let props = match extract_with_prompt(&p.runtime_config, "asset_prop", &p.script_body).await {
-            Some(items) => items.iter().map(normalize_prop).collect(),
-            None => fallback_props(&p.script_body),
+
+        let props = if p.config_ready {
+            match extract_with_prompt(&p.runtime_config, "asset_prop", &p.script_body).await {
+                Some(items) => {
+                    llm_used = true;
+                    items.iter().map(normalize_prop).collect()
+                },
+                None => {
+                    fallback_used = true;
+                    fallback_props(&p.script_body).iter().map(normalize_prop).collect()
+                }
+            }
+        } else {
+            fallback_used = true;
+            fallback_props(&p.script_body).iter().map(normalize_prop).collect()
         };
 
         let write_conn = Connection::open(&p.db_path).map_err(|e| format!("打开数据库写入资产失败: {}", e))?;
         persist_assets(&write_conn, &p.task_id, &characters, &scenes, &props, &p.time)?;
 
-        let extraction_model = if fallback_used {
-            format!("local-asset-extractor-v2 / {} / regex-fallback", p.runtime_config.default_model)
-        } else {
+        let extraction_mode = match (llm_used, fallback_used) {
+            (true, true) => "mixed",
+            (true, false) => "llm",
+            _ => "fallback",
+        };
+        let extraction_model = if llm_used {
             format!("local-asset-extractor-v2 / {}", p.runtime_config.default_model)
+        } else {
+            "local-asset-extractor-v2 / regex-fallback-no-api".into()
         };
 
         Ok(json!({
@@ -257,7 +314,10 @@ pub fn run_asset_extraction(conn: &Connection, task_id: &str) -> impl std::futur
             "props": props,
             "extractedAt": p.time,
             "extractionModel": extraction_model,
+            "extractionMode": extraction_mode,
+            "configReady": p.config_ready,
             "fallbackUsed": fallback_used,
+            "llmUsed": llm_used,
             "promptSlugs": ["asset_character", "asset_scene", "asset_prop"]
         }))
     }
