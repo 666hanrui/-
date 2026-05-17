@@ -46,9 +46,20 @@ export default function AuthModal() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isShaking, setIsShaking] = useState(false);
 
+  const syncBackendToken = async (token?: string, refreshToken?: string) => {
+    if (!token) return;
+    await invoke("auth/set-token", {
+      token,
+      refreshToken: refreshToken || "",
+    }, { silent: true }).catch(() => undefined);
+  };
+
   useEffect(() => {
     const probeAuth = async () => {
       try {
+        if (user?.token) {
+          await syncBackendToken(user.token, "");
+        }
         const res = await invoke<{
           loggedIn: boolean;
           username?: string;
@@ -58,16 +69,20 @@ export default function AuthModal() {
           setShowModal(true);
         } else if (res.loggedIn) {
           setUser({
-            username: res.username || "Creator",
-            token: res.token || "",
+            username: res.username || user?.username || "Creator",
+            token: res.token || user?.token || "",
           });
+          setShowModal(false);
+        } else if (user?.token) {
+          setShowModal(false);
         }
       } catch (err) {
         if (!user) setShowModal(true);
       }
     };
     probeAuth();
-  }, [invoke, user, setUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +113,8 @@ export default function AuthModal() {
         setTimeout(() => setIsShaking(false), 400);
         return;
       }
+
+      await syncBackendToken(res.token, res.refreshToken || "");
 
       setUser({
         username: res.username || username,
