@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../store/useAppStore';
-import { Sparkles, Route as RouteIcon, FileText, Library, Image as ImageIcon, Film, Clapperboard, FolderKanban, Settings, Command, User as UserIcon, LogOut } from 'lucide-react';
+import { Sparkles, Route as RouteIcon, FileText, Library, Image as ImageIcon, Film, Layers3, Clapperboard, FolderKanban, Settings, Command, User as UserIcon, LogOut } from 'lucide-react';
 
 export default function GlobalSidebar() {
   const { user, setUser, language } = useAppStore();
@@ -50,6 +50,7 @@ export default function GlobalSidebar() {
 
         <NavItem icon={<ImageIcon size={20} />} path="/image" currentPath={location.pathname} tooltip={isZh ? '图像提示词' : 'Image Prompt'} />
         <NavItem icon={<Film size={20} />} path="/video" currentPath={location.pathname} tooltip={isZh ? '视频提示词' : 'Video Prompt'} />
+        <NavItem icon={<Layers3 size={20} />} path="/frame-prompt" currentPath={location.pathname} tooltip={isZh ? '逐镜提示词' : 'Frame Prompt'} />
         <NavItem icon={<Clapperboard size={20} />} path="/seedance" currentPath={location.pathname} tooltip="Seedance" />
 
         <div className="w-6 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent my-2 mx-auto" />
