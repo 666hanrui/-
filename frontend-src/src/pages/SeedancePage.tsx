@@ -211,9 +211,9 @@ export default function SeedancePage() {
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<Clapperboard size={24} />}
-        eyebrow="Seedance Recovery Console"
+        eyebrow="Canonical Seedance Flow"
         title="Seedance V5 / 验收工作台"
-        subtitle="固定两层：Phase A-D 分析 → Unit E/F/G 生成。页面监听 seedance:progress，并以 script task 为恢复主键。"
+        subtitle="严格对应 seedance_phase_ad、seedance_unit_efg。固定两层：Phase A-D 分析 → Unit E/F/G 生成，页面监听 seedance:progress，并以 script task 为恢复主键。"
         actions={<ActionBar align="right" className="flex-wrap"><ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!selectedTaskId} icon={<Boxes size={16} />}>资产</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/image')} disabled={!selectedTaskId} icon={<ImageIcon size={16} />}>图像</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/video')} disabled={!selectedTaskId} icon={<Film size={16} />}>视频</ActionButton></ActionBar>}
       />
 
@@ -224,8 +224,8 @@ export default function SeedancePage() {
       <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6 min-h-0">
         <aside className="space-y-6 min-w-0">
           <Panel title="Script Source" subtitle="选择剧本任务作为 Seedance 源" noPadding><div className="p-4"><ScriptSelector selectedTaskId={currentTaskId} onSelect={onSelectScript} /></div></Panel>
-          <Panel title="Script Preview"><ResultViewer title="SCRIPT" content={scriptText || '请选择一个剧本任务。'} /></Panel>
-          <Panel title="Progress"><ResultViewer title="SEEDANCE EVENTS" content={progress.length ? progress.join('\n') : '等待 seedance:progress。'} /></Panel>
+          <Panel title="Script Preview"><ResultViewer maxHeight="max-h-[200px]" title="SCRIPT" content={scriptText || '请选择一个剧本任务。'} /></Panel>
+          <Panel title="Progress"><ResultViewer maxHeight="max-h-[300px]" title="SEEDANCE EVENTS" content={progress.length ? progress.join('\n') : '等待 seedance:progress。'} /></Panel>
         </aside>
 
         <main className="space-y-6 min-w-0">
@@ -233,7 +233,7 @@ export default function SeedancePage() {
             <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
               <Panel title="Layer 1 · Phase A-D 分析" subtitle={analysis ? 'ready' : 'pending'}>
                 <div className="grid grid-cols-2 gap-3 mb-4"><MiniInfo label="总时长" value={analysis?.totalSec || analysis?.total_sec || 'N/A'} /><MiniInfo label="单元数" value={analysis?.totalUnits || analysis?.total_units || units.length || 'N/A'} /></div>
-                <ResultViewer title="A-D ANALYSIS" content={analysis ? JSON.stringify(analysis, null, 2) : '等待 A-D 分析结果。'} />
+                <ResultViewer maxHeight="max-h-[300px]" title="A-D ANALYSIS" content={analysis ? JSON.stringify(analysis, null, 2) : '等待 A-D 分析结果。'} />
               </Panel>
 
               <Panel title="Layer 2 · Unit E/F/G 列表" subtitle={`${units.length} units`}>
@@ -243,7 +243,7 @@ export default function SeedancePage() {
           </Panel>
 
           <Panel title={`Unit Detail · ${activeUnit ? activeUnitIndex + 1 : '-'}`} subtitle="copyArea / noteAreaJson / status" actions={<ActionBar><ActionButton variant="secondary" onClick={refreshCurrentUnit} disabled={!selectedTaskId || !activeUnit || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>刷新单元</ActionButton><ActionButton onClick={() => runUnit(activeUnitIndex)} disabled={!selectedTaskId || !activeUnit || busy === 'unit'} isLoading={busy === 'unit'} icon={<Copy size={16} />}>生成当前单元</ActionButton></ActionBar>}>
-            {!activeUnit ? <EmptyState title="请选择一个 Unit" description="左侧完成 A-D 分析后，在 Unit 列表里选择一个单元。" icon={<Clapperboard size={28} />} /> : <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5"><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><MiniInfo label="status" value={unitStatus(activeUnit)} /><MiniInfo label="retry" value={activeUnit.retryCount ?? activeUnit.retry_count ?? 0} /></div>{(activeUnit.errorMessage || activeUnit.error_message) && <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-red-200 text-sm">{activeUnit.errorMessage || activeUnit.error_message}</div>}<ResultViewer title="COPY AREA" content={activeUnit.copyArea || activeUnit.copy_area || '尚未生成 copyArea。'} /></div><ResultViewer title="NOTE AREA JSON" content={noteArea ? JSON.stringify(noteArea, null, 2) : '尚未生成 noteAreaJson。'} /></div>}
+            {!activeUnit ? <EmptyState title="请选择一个 Unit" description="左侧完成 A-D 分析后，在 Unit 列表里选择一个单元。" icon={<Clapperboard size={28} />} /> : <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5"><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><MiniInfo label="status" value={unitStatus(activeUnit)} /><MiniInfo label="retry" value={activeUnit.retryCount ?? activeUnit.retry_count ?? 0} /></div>{(activeUnit.errorMessage || activeUnit.error_message) && <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-red-200 text-sm">{activeUnit.errorMessage || activeUnit.error_message}</div>}<ResultViewer maxHeight="max-h-[250px]" title="COPY AREA" content={activeUnit.copyArea || activeUnit.copy_area || '尚未生成 copyArea。'} /></div><ResultViewer maxHeight="max-h-[250px]" title="NOTE AREA JSON" content={noteArea ? JSON.stringify(noteArea, null, 2) : '尚未生成 noteAreaJson。'} /></div>}
           </Panel>
         </main>
       </div>

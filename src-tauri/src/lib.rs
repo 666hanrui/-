@@ -246,7 +246,7 @@ mod cmd {
         };
 
         let conn = state.lock().map_err(|e| e.to_string())?;
-        let result = tokio::runtime::Handle::current().block_on(
+        let result = tauri::async_runtime::block_on(
             crate::services::script_generation::run_script_generation(&conn, &input, None),
         )?;
         serde_json::to_value(&result).map_err(|e| e.to_string())
@@ -283,7 +283,7 @@ mod cmd {
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let conn = state.lock().map_err(|e| e.to_string())?;
-        tokio::runtime::Handle::current().block_on(
+        tauri::async_runtime::block_on(
             crate::services::prompt_tasks::run_image_prompt_generation(&conn, &payload),
         )
     }
@@ -294,7 +294,7 @@ mod cmd {
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let conn = state.lock().map_err(|e| e.to_string())?;
-        tokio::runtime::Handle::current().block_on(
+        tauri::async_runtime::block_on(
             crate::services::prompt_tasks::run_video_prompt_generation(&conn, &payload),
         )
     }
@@ -305,7 +305,7 @@ mod cmd {
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let conn = state.lock().map_err(|e| e.to_string())?;
-        tokio::runtime::Handle::current().block_on(
+        tauri::async_runtime::block_on(
             crate::services::prompt_tasks::run_image_prompt_review(&conn, &payload),
         )
     }
@@ -316,7 +316,7 @@ mod cmd {
         payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let conn = state.lock().map_err(|e| e.to_string())?;
-        tokio::runtime::Handle::current().block_on(
+        tauri::async_runtime::block_on(
             crate::services::prompt_tasks::run_video_prompt_review(&conn, &payload),
         )
     }
@@ -461,7 +461,7 @@ mod cmd {
         task_id: String,
     ) -> Result<serde_json::Value, String> {
         let conn = state.lock().map_err(|e| e.to_string())?;
-        tokio::runtime::Handle::current().block_on(
+        tauri::async_runtime::block_on(
             crate::services::prompt_quality::run_prompt_quality_check(&conn, &task_id),
         )
     }
@@ -999,6 +999,11 @@ mod cmd {
     pub fn select_image_file() -> serde_json::Value {
         serde_json::json!({ "cancelled": true, "base64": "", "mimeType": "" })
     }
+
+    #[tauri::command]
+    pub fn get_prompt_flow_contract() -> serde_json::Value {
+        llm::prompts::canonical_flow_contract()
+    }
 }
 
 pub fn run() {
@@ -1103,6 +1108,7 @@ pub fn run() {
             cmd::doctor_diagnose,
             cmd::select_text_file,
             cmd::select_image_file,
+            cmd::get_prompt_flow_contract,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ScriptStack");

@@ -817,45 +817,51 @@ pub fn get_prompt_output_by_task(conn: &Connection, task_id: &str) -> Option<ser
 }
 
 pub fn update_prompt_output(conn: &Connection, task_id: &str, seedance_groups: &str) {
-    conn.execute(
-        "UPDATE prompt_output_records SET seedance_groups_json = ?1 WHERE task_id = ?2",
-        params![seedance_groups, task_id],
-    )
-    .ok();
+    let changed = conn
+        .execute(
+            "UPDATE prompt_output_records SET seedance_groups_json = ?1 WHERE task_id = ?2",
+            params![seedance_groups, task_id],
+        )
+        .unwrap_or(0);
+
+    if changed == 0 {
+        conn.execute(
+            "INSERT INTO prompt_output_records (id, task_id, grid_groups_json, seedance_groups_json, generation_model, created_at)
+             VALUES (?1, ?2, '[]', ?3, 'manual-seedance-groups', ?4)",
+            params![uuid(), task_id, seedance_groups, now()],
+        )
+        .ok();
+    }
 }
 
 // ── Image/Video Generation & Review wrappers ──
 
 pub fn run_image_generation(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_tasks::run_image_prompt_generation(
-            conn, input,
-        ))
-        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
+    tauri::async_runtime::block_on(crate::services::prompt_tasks::run_image_prompt_generation(
+        conn, input,
+    ))
+    .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_video_generation(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_tasks::run_video_prompt_generation(
-            conn, input,
-        ))
-        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
+    tauri::async_runtime::block_on(crate::services::prompt_tasks::run_video_prompt_generation(
+        conn, input,
+    ))
+    .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_image_review(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_tasks::run_image_prompt_review(
-            conn, input,
-        ))
-        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
+    tauri::async_runtime::block_on(crate::services::prompt_tasks::run_image_prompt_review(
+        conn, input,
+    ))
+    .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_video_review(conn: &Connection, input: &serde_json::Value) -> serde_json::Value {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_tasks::run_video_prompt_review(
-            conn, input,
-        ))
-        .unwrap_or_else(|e| serde_json::json!({ "error": e }))
+    tauri::async_runtime::block_on(crate::services::prompt_tasks::run_video_prompt_review(
+        conn, input,
+    ))
+    .unwrap_or_else(|e| serde_json::json!({ "error": e }))
 }
 
 pub fn run_script_review(
@@ -863,7 +869,7 @@ pub fn run_script_review(
     input: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let task_id = input["taskId"].as_str().unwrap_or("").to_string();
-    tokio::runtime::Handle::current().block_on(crate::services::script_review::run_script_review(
+    tauri::async_runtime::block_on(crate::services::script_review::run_script_review(
         conn, &task_id,
     ))
 }
@@ -933,8 +939,9 @@ pub fn finalize_screenplay(
 
 pub fn seedance_phase_ad(conn: &Connection, task_id: &str) -> Result<serde_json::Value, String> {
     let tid = task_id.to_string();
-    let analysis = tokio::runtime::Handle::current()
-        .block_on(crate::services::seedance_service::run_phase_ad(conn, &tid))?;
+    let analysis = tauri::async_runtime::block_on(
+        crate::services::seedance_service::run_phase_ad(conn, &tid),
+    )?;
     Ok(serde_json::to_value(&analysis).map_err(|e| e.to_string())?)
 }
 
@@ -967,14 +974,16 @@ pub fn seedance_run_unit(
     unit_index: i32,
 ) -> Result<serde_json::Value, String> {
     let tid = task_id.to_string();
-    tokio::runtime::Handle::current().block_on(
-        crate::services::seedance_service::run_unit_generation(conn, &tid, unit_index as usize),
-    )
+    tauri::async_runtime::block_on(crate::services::seedance_service::run_unit_generation(
+        conn,
+        &tid,
+        unit_index as usize,
+    ))
 }
 
 pub fn seedance_run_all(conn: &Connection, task_id: &str) -> Result<serde_json::Value, String> {
     let tid = task_id.to_string();
-    let results = tokio::runtime::Handle::current().block_on(
+    let results = tauri::async_runtime::block_on(
         crate::services::seedance_service::run_generate_all(conn, &tid, None),
     )?;
     Ok(serde_json::json!({"taskId": task_id, "completed": true, "results": results}))
@@ -986,35 +995,75 @@ pub fn run_prompt_generation(
     conn: &Connection,
     input: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    tokio::runtime::Handle::current().block_on(
-        crate::services::prompt_generation::run_prompt_generation(conn, input),
-    )
+    tauri::async_runtime::block_on(crate::services::prompt_generation::run_prompt_generation(
+        conn, input,
+    ))
 }
 
 pub fn run_prompt_group_gen(
     conn: &Connection,
     input: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    tokio::runtime::Handle::current()
-        .block_on(crate::services::prompt_generation::run_prompt_group_generation(conn, input))
+    tauri::async_runtime::block_on(
+        crate::services::prompt_generation::run_prompt_group_generation(conn, input),
+    )
 }
 
 pub fn get_scene_count(conn: &Connection, task_id: &str) -> Option<i64> {
-    conn.query_row("SELECT json_array_length(grid_groups_json) FROM prompt_output_records WHERE task_id = ?1 LIMIT 1", params![task_id], |row| row.get(0)).ok()
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT grid_groups_json FROM prompt_output_records WHERE task_id = ?1 ORDER BY created_at DESC LIMIT 1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+    let parsed = raw.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())?;
+    if let Some(shots) = parsed.get("shots").and_then(|v| v.as_array()) {
+        return Some(shots.len() as i64);
+    }
+    if let Some(shots) = parsed
+        .get("outline")
+        .and_then(|value| value.get("shots"))
+        .and_then(|value| value.as_array())
+    {
+        return Some(shots.len() as i64);
+    }
+    parsed.as_array().map(|items| items.len() as i64)
 }
 
 pub fn get_segment_titles(conn: &Connection, task_id: &str) -> Vec<String> {
     let s: Option<String> = conn
         .query_row(
-            "SELECT grid_groups_json FROM prompt_output_records WHERE task_id = ?1 LIMIT 1",
+            "SELECT grid_groups_json FROM prompt_output_records WHERE task_id = ?1 ORDER BY created_at DESC LIMIT 1",
             params![task_id],
             |row| row.get(0),
         )
         .ok();
-    s.and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
-        .map(|v| {
-            v.iter()
-                .filter_map(|g| g["title"].as_str().map(String::from))
+    let parsed = match s.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()) {
+        Some(value) => value,
+        None => return vec![],
+    };
+    let shots = parsed
+        .get("shots")
+        .and_then(|value| value.as_array())
+        .or_else(|| {
+            parsed
+                .get("outline")
+                .and_then(|value| value.get("shots"))
+                .and_then(|value| value.as_array())
+        })
+        .or_else(|| parsed.as_array());
+    shots
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|g| {
+                    g["title"]
+                        .as_str()
+                        .or_else(|| g["name"].as_str())
+                        .map(String::from)
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -1028,9 +1077,9 @@ pub fn generate_outline(
     conn: &Connection,
     input: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    tokio::runtime::Handle::current().block_on(
-        crate::services::prompt_generation::generate_outline(conn, input),
-    )
+    tauri::async_runtime::block_on(crate::services::prompt_generation::generate_outline(
+        conn, input,
+    ))
 }
 
 pub fn confirm_outline(conn: &Connection, input: &serde_json::Value) {
@@ -1048,7 +1097,7 @@ pub fn run_asset_extraction(
     input: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let task_id = input["taskId"].as_str().unwrap_or("").to_string();
-    tokio::runtime::Handle::current().block_on(
-        crate::services::asset_extraction::run_asset_extraction(conn, &task_id),
-    )
+    tauri::async_runtime::block_on(crate::services::asset_extraction::run_asset_extraction(
+        conn, &task_id,
+    ))
 }

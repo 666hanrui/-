@@ -18,7 +18,7 @@
 | 本地 Git 原始提示词 | 已归档 | `original-prompt-archive/manifest.json` 记录 `sourceCommit`、`byteSize`、`sha256`、`exactBytesFromGit` | 不允许重写 raw-original |
 | active prompt 与 raw-original | 需持续校验 | 后续必须用脚本比对 active prompt 与 raw-original | 任何变更必须生成 hash 记录 |
 | 远端服务器提示词 dump | 不存在合法导出 | `REMOTE_SERVER_CAPTURE_STATUS.zh-CN.md` 明确没有合法导出的远端服务器提示词 dump | 不允许伪造远端来源 |
-| debug prompt 审计 | 未闭环 | `data/debug-prompts` 尚未证明有真实模型调用审计记录 | 后续需要真实调用后落 `prompt_hash_index.jsonl` |
+| debug prompt 审计 | 未闭环 | 默认落到 `$HOME/Library/Application Support/ScriptStack/debug-prompts`，也可用 `SCRIPTSTACK_PROMPT_AUDIT_DIR` 覆盖 | 后续需要真实调用后落 `prompt_hash_index.jsonl`，禁止写回源码目录触发 Tauri dev 重启 |
 
 ## 2. 前端 Bridge 与后端命令对账
 

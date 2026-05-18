@@ -238,9 +238,9 @@ export default function FramePromptLab() {
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<Layers3 size={24} />}
-        eyebrow="PromptLab V2 Recovery"
-        title="逐镜分镜提示词 / 旧链路工作台"
-        subtitle="接回旧 PromptLab V2：outline → confirm → run generation → group regeneration → output recovery → quality check。"
+        eyebrow="Canonical Frame Prompt Flow"
+        title="逐镜分镜提示词 / 原始链路工作台"
+        subtitle="严格对应 23 提示词中的 prompt_segment_planning、prompt_seedance_scene、prompt_review：outline → confirm → run generation → group regeneration → quality check。"
         actions={
           <ActionBar align="right" className="flex-wrap">
             <ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton>
@@ -268,18 +268,21 @@ export default function FramePromptLab() {
             <div className="p-4"><ScriptSelector selectedTaskId={selectedTaskId} onSelect={onSelectScript} /></div>
           </Panel>
 
-          <Panel title="恢复与生成控制" subtitle="旧 PromptLab V2 命令入口">
-            <ActionBar className="flex-col items-stretch">
-              <ActionButton variant="secondary" onClick={() => refreshAll()} disabled={!selectedTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>恢复已有输出</ActionButton>
-              <ActionButton onClick={generateOutline} disabled={!selectedTaskId} isLoading={busy === 'outline'} icon={<Wand2 size={16} />}>生成 Outline</ActionButton>
-              <ActionButton variant="secondary" onClick={confirmOutline} disabled={!selectedTaskId || !outline} isLoading={busy === 'confirm'} icon={<CheckCircle2 size={16} />}>确认 Outline</ActionButton>
-              <ActionButton variant="secondary" onClick={runAll} disabled={!selectedTaskId || !outline} isLoading={busy === 'all'} icon={<Layers3 size={16} />}>全量逐镜生成</ActionButton>
-              <ActionButton variant="secondary" onClick={runQuality} disabled={!selectedTaskId} isLoading={busy === 'quality'} icon={<Activity size={16} />}>质量检查</ActionButton>
-            </ActionBar>
+          <Panel title="生成与恢复控制" subtitle="原始逐镜链路命令入口"
+            footer={
+              <ActionBar className="flex-col items-stretch">
+                <ActionButton variant="secondary" onClick={() => refreshAll()} disabled={!selectedTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>恢复已有输出</ActionButton>
+                <ActionButton onClick={generateOutline} disabled={!selectedTaskId} isLoading={busy === 'outline'} icon={<Wand2 size={16} />}>生成 Outline</ActionButton>
+                <ActionButton variant="secondary" onClick={confirmOutline} disabled={!selectedTaskId || !outline} isLoading={busy === 'confirm'} icon={<CheckCircle2 size={16} />}>确认 Outline</ActionButton>
+                <ActionButton variant="secondary" onClick={runAll} disabled={!selectedTaskId || !outline} isLoading={busy === 'all'} icon={<Layers3 size={16} />}>全量逐镜生成</ActionButton>
+                <ActionButton variant="secondary" onClick={runQuality} disabled={!selectedTaskId} isLoading={busy === 'quality'} icon={<Activity size={16} />}>质量检查</ActionButton>
+              </ActionBar>
+            }
+          >
           </Panel>
 
           <Panel title="脚本预览" subtitle="Script body preview">
-            <ResultViewer title="SCRIPT" content={scriptPreview || '请选择 script task。'} />
+            <ResultViewer maxHeight="max-h-[200px]" title="SCRIPT" content={scriptPreview || '请选择 script task。'} />
           </Panel>
 
           <Panel title="质量检查" subtitle="prompt/quality-check">
@@ -293,8 +296,8 @@ export default function FramePromptLab() {
               <EmptyState title="暂无 Outline" description="点击生成 Outline，或从已有 prompt_output_records 恢复。" icon={<Layers3 size={30} />} />
             ) : (
               <div className="space-y-5">
-                <div className="grid grid-cols-1 2xl:grid-cols-[1fr_360px] gap-5">
-                  <ResultViewer title="OUTLINE JSON" content={JSON.stringify(outline, null, 2)} />
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-5">
+                  <ResultViewer maxHeight="max-h-[400px]" title="OUTLINE JSON" content={JSON.stringify(outline, null, 2)} />
                   <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
                     {shots.map((shot: any, index: number) => (
                       <button key={index} onClick={() => setActiveSceneIndex(index)} className={`w-full rounded-xl border p-3 text-left transition-all ${activeSceneIndex === index ? 'bg-indigo-500/20 border-indigo-500/40' : 'bg-white/[0.03] border-white/[0.05] hover:bg-white/[0.06]'}`}>
@@ -309,11 +312,11 @@ export default function FramePromptLab() {
           </Panel>
 
           <Panel title={`单镜生成 / Scene ${activeSceneIndex + 1}`} subtitle="prompt/run-group-generation" actions={<ActionButton onClick={runGroup} disabled={!selectedTaskId || !outline} isLoading={busy === 'group'} icon={<Wand2 size={16} />}>生成当前镜</ActionButton>}>
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
               <div className="space-y-4">
                 <FormField label="sceneIndex"><TextInput type="number" value={activeSceneIndex} onChange={(event: any) => setActiveSceneIndex(Math.max(0, Number(event.target.value) || 0))} /></FormField>
-                <FormField label="reviewFeedback"><TextArea value={reviewFeedback} onChange={(event: any) => setReviewFeedback(event.target.value)} rows={5} placeholder="可选：质量检查或人工反馈。" /></FormField>
-                <FormField label="originalSeedance"><TextArea value={originalSeedance} onChange={(event: any) => setOriginalSeedance(event.target.value)} rows={8} placeholder="可选：粘贴原始单镜 JSON，用于重生成。" /></FormField>
+                <FormField label="reviewFeedback"><TextArea value={reviewFeedback} onChange={(event: any) => setReviewFeedback(event.target.value)} rows={3} placeholder="可选：质量检查或人工反馈。" /></FormField>
+                <FormField label="originalSeedance"><TextArea value={originalSeedance} onChange={(event: any) => setOriginalSeedance(event.target.value)} rows={3} placeholder="可选：粘贴原始单镜 JSON，用于重生成。" /></FormField>
               </div>
               <div className="space-y-4">
                 <ResultViewer title="ACTIVE OUTLINE SHOT" content={activeShot ? JSON.stringify(activeShot, null, 2) : '暂无当前 outline shot。'} />
@@ -323,9 +326,9 @@ export default function FramePromptLab() {
           </Panel>
 
           <Panel title="Prompt Output 恢复 / 编辑" subtitle="prompt/get-output + prompt/update-output" actions={<ActionButton variant="secondary" onClick={saveOutput} disabled={!selectedTaskId} isLoading={busy === 'save'} icon={<Save size={16} />}>保存 Seedance Groups</ActionButton>}>
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
               <ResultViewer title="GRID GROUPS / OUTLINE STORED" content={gridGroups ? JSON.stringify(gridGroups, null, 2) : '暂无 gridGroupsJson。'} />
-              <FormField label="seedanceGroupsJson"><TextArea value={editedSeedanceGroups} onChange={(event: any) => setEditedSeedanceGroups(event.target.value)} rows={18} placeholder="逐镜生成后可在这里编辑 seedanceGroupsJson。" /></FormField>
+              <FormField label="seedanceGroupsJson"><TextArea value={editedSeedanceGroups} onChange={(event: any) => setEditedSeedanceGroups(event.target.value)} rows={6} placeholder="逐镜生成后可在这里编辑 seedanceGroupsJson。" /></FormField>
             </div>
           </Panel>
         </main>

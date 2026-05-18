@@ -22,8 +22,10 @@ const COMMAND_SPECS: Record<string, CommandSpec> = {
   "config/test": { command: "test_connection", wrap: "payload" },
   "app/version": { command: "get_version", wrap: "raw" },
   "database/meta": { command: "get_database_meta", wrap: "raw" },
+  "prompt/flow-contract": { command: "get_prompt_flow_contract", wrap: "raw" },
   "test_connection": { command: "test_connection", wrap: "payload" },
   "get_database_meta": { command: "get_database_meta", wrap: "raw" },
+  "get_prompt_flow_contract": { command: "get_prompt_flow_contract", wrap: "raw" },
 
   "project/create": { command: "screenplay_create_project", wrap: "init" },
   "project/get-all": { command: "get_projects", wrap: "raw" },
@@ -169,7 +171,7 @@ function resolveSpec(action: string): CommandSpec {
 }
 
 function isTauriRuntime() {
-  return Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+  return typeof (window as any).__TAURI_INTERNALS__ !== 'undefined';
 }
 
 export const useTudouBridge = () => {
@@ -201,8 +203,40 @@ export const useTudouBridge = () => {
           const fetchPromise = (async () => {
             if (!isTauriRuntime()) {
               console.warn(`[Mock IPC] ${backendCommand}`, backendArgs);
-              if (backendCommand === "auth_status") return { loggedIn: false } as any;
+              if (backendCommand === "auth_status") {
+                const user = useAppStore.getState().user;
+                return user?.token
+                  ? { loggedIn: true, username: user.username, token: user.token }
+                  : { loggedIn: false };
+              }
               if (backendCommand === "auth_login") return { token: "mock", username: payload.username } as any;
+              if (backendCommand === "get_version") return "dev-browser" as any;
+              if (backendCommand === "get_app_settings") {
+                return {
+                  textEndpoint: "",
+                  textKey: "",
+                  textModel: "deepseek-reasoner",
+                  textMode: "openai",
+                  imageEndpoint: "",
+                  imageKey: "",
+                  imageModel: "",
+                  reviewThreshold: 90,
+                  enableLocalSave: true,
+                } as any;
+              }
+              if (backendCommand === "get_database_meta") {
+                return {
+                  dbPath: "browser-mock",
+                  dataDir: "browser-mock",
+                } as any;
+              }
+              if (backendCommand === "test_connection") {
+                return {
+                  ok: false,
+                  latencyMs: 0,
+                  error: "Browser mock: Tauri IPC unavailable",
+                } as any;
+              }
               if (backendCommand === "get_recent_script_tasks") return [] as any;
               if (backendCommand === "load_script_task") return { task: payload, outputs: [] } as any;
               if (backendCommand === "get_projects") return [] as any;

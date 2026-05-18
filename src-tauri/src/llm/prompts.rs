@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{json, Value};
 
 // ── Template files (embedded at compile time) ──
 
@@ -23,6 +23,98 @@ const SLUG_PROMPT_REVIEW: &str = include_str!("prompts/slug_prompt_review.txt");
 
 const CTX_SEEDANCE_PHASE_AD: &str = include_str!("prompts/ctx_seedance_phase_ad.txt");
 const CTX_SEEDANCE_UNIT_EFG: &str = include_str!("prompts/ctx_seedance_unit_efg.txt");
+const PROMPT_MANIFEST: &str = include_str!("prompts/manifest.json");
+
+fn canonical_entry(
+    files: &[Value],
+    order: u8,
+    phase: &str,
+    phase_label: &str,
+    stage: &str,
+    usage_key: &str,
+    route: &str,
+    page: &str,
+    command: &str,
+    required_input: &str,
+    produced_artifact: &str,
+) -> Value {
+    let meta = files
+        .iter()
+        .find(|item| item["usageKey"].as_str() == Some(usage_key));
+
+    json!({
+        "order": order,
+        "phase": phase,
+        "phaseLabel": phase_label,
+        "stage": stage,
+        "usageKey": usage_key,
+        "route": route,
+        "page": page,
+        "command": command,
+        "requiredInput": required_input,
+        "producedArtifact": produced_artifact,
+        "promptFile": meta.and_then(|item| item["file"].as_str()).unwrap_or(""),
+        "category": meta.and_then(|item| item["category"].as_str()).unwrap_or(""),
+        "callEntry": meta.and_then(|item| item["callEntry"].as_str()).unwrap_or(""),
+        "promptSlug": meta.and_then(|item| item["promptSlug"].as_str()),
+        "contextType": meta.and_then(|item| item["contextType"].as_str()),
+        "activePath": meta.and_then(|item| item["activePath"].as_str()).unwrap_or(""),
+        "rawArchivePath": meta.and_then(|item| item["rawArchivePath"].as_str()).unwrap_or(""),
+        "activeSha256": meta.and_then(|item| item["activeSha256"].as_str()).unwrap_or(""),
+        "byteSize": meta.and_then(|item| item["byteSize"].as_u64()).unwrap_or(0),
+        "lineCount": meta.and_then(|item| item["lineCount"].as_u64()).unwrap_or(0),
+        "exactMatch": meta.and_then(|item| item["exactMatch"].as_bool()).unwrap_or(false),
+        "auditStatus": meta.and_then(|item| item["auditStatus"].as_str()).unwrap_or("missing"),
+    })
+}
+
+/// Canonical product flow for the original 23 prompts.
+///
+/// This is intentionally explicit: the UI can render it, audits can compare it,
+/// and future migrations have a single contract to preserve instead of relying
+/// on scattered page labels.
+pub fn canonical_flow_contract() -> Value {
+    let manifest: Value = serde_json::from_str(PROMPT_MANIFEST).unwrap_or_else(|_| json!({}));
+    let files = manifest["files"].as_array().cloned().unwrap_or_default();
+
+    let entries = vec![
+        canonical_entry(&files, 1, "screenplay", "剧本工作流", "Step 1 / 破题 / 概念生成", "screenplay_step stepNumber=1", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "project.init + concept + config", "step_1 active version"),
+        canonical_entry(&files, 2, "screenplay", "剧本工作流", "Step 2 / 人物", "screenplay_step stepNumber=2", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1 structured output", "step_2 active version"),
+        canonical_entry(&files, 3, "screenplay", "剧本工作流", "Step 3 / 世界观", "screenplay_step stepNumber=3", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-2 structured output", "step_3 active version"),
+        canonical_entry(&files, 4, "screenplay", "剧本工作流", "Step 4 / 大纲", "screenplay_step stepNumber=4", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-3 structured output", "step_4 active version"),
+        canonical_entry(&files, 5, "screenplay", "剧本工作流", "Step 5 / 分场", "screenplay_step stepNumber=5", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-4 structured output", "step_5 active version"),
+        canonical_entry(&files, 6, "screenplay", "剧本工作流", "Step 6 / 对白", "screenplay_step stepNumber=6", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-5 structured output + duration redline", "step_6 active version"),
+        canonical_entry(&files, 7, "screenplay", "剧本工作流", "Step 7 / 成稿", "screenplay_step stepNumber=7", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-6 output + after-step-6 checkpoint", "step_7 active version"),
+        canonical_entry(&files, 8, "screenplay", "剧本工作流", "Step 8 / 医生收束", "screenplay_step stepNumber=8", "/workflow", "WorkflowValley / StepEngine", "workflow/generate", "Step 1-7 output + after-step-6 checkpoint", "step_8 active version"),
+        canonical_entry(&files, 9, "screenplay_quality", "剧本工作流质量门", "Selfcheck / 单步自检", "screenplay_selfcheck", "/workflow", "WorkflowValley / StepEngine", "workflow/selfcheck", "current step output", "cached selfcheck report"),
+        canonical_entry(&files, 10, "screenplay_quality", "剧本工作流质量门", "Checkpoint / Step 6 后检查点", "screenplay_checkpoint", "/workflow", "WorkflowValley / StepEngine + AiDoctorPanel", "workflow/regenerate-checkpoint", "project snapshot after Step 6", "after-step-6 checkpoint"),
+        canonical_entry(&files, 11, "script_task", "剧本任务", "Script Planning / 剧本规划", "promptSlug=script_planning", "/scripts", "ScriptTasksPage", "script/generate", "input summary + mode + audience + style", "script planning sections"),
+        canonical_entry(&files, 12, "script_task", "剧本任务", "Script Writing / 正文生成", "promptSlug=script_writing", "/scripts", "ScriptTasksPage", "script/generate", "planning result + generation settings", "script body"),
+        canonical_entry(&files, 13, "script_task", "剧本任务", "Script Review / 剧本审核", "promptSlug=script_review", "/scripts", "ScriptTasksPage", "script/review", "script task body", "script review score/issues/suggestions"),
+        canonical_entry(&files, 14, "asset_matrix", "资产矩阵", "Asset Character / 角色资产", "promptSlug=asset_character", "/assets", "AssetsForge", "asset/extract", "script task body", "characters json"),
+        canonical_entry(&files, 15, "asset_matrix", "资产矩阵", "Asset Scene / 场景资产", "promptSlug=asset_scene", "/assets", "AssetsForge", "asset/extract", "script task body", "scenes json"),
+        canonical_entry(&files, 16, "asset_matrix", "资产矩阵", "Asset Prop / 道具资产", "promptSlug=asset_prop", "/assets", "AssetsForge", "asset/extract", "script task body", "props json"),
+        canonical_entry(&files, 17, "frame_prompt", "逐镜提示词", "Prompt Segment Planning / 分镜大纲", "promptSlug=prompt_segment_planning", "/frame-prompt", "FramePromptLab", "prompt/generate-outline", "script task body + assets", "outline shots"),
+        canonical_entry(&files, 18, "frame_prompt", "逐镜提示词", "Prompt Seedance Scene / 单镜提示词", "promptSlug=prompt_seedance_scene", "/frame-prompt", "FramePromptLab", "prompt/run-generation + prompt/run-group-generation", "confirmed outline + scene index + feedback", "seedanceGroups json"),
+        canonical_entry(&files, 19, "seedance", "Seedance", "Seedance Phase A-D / 镜头结构分析", "contextType=seedance_phase_ad", "/seedance", "SeedancePage", "seedance/phase-ad", "script body + duration + assets", "seedance analysis + units"),
+        canonical_entry(&files, 20, "seedance", "Seedance", "Seedance Unit E/F/G / 镜头单元生成", "contextType=seedance_unit_efg", "/seedance", "SeedancePage", "seedance/run-unit + seedance/run-all", "unit + script fragment + analysis + assets", "unit copyArea + noteAreaJson"),
+        canonical_entry(&files, 21, "independent_prompt", "独立提示词", "Image Prompt Generation / 图像提示词", "promptSlug=image_prompt_generation", "/image", "PromptLab(image)", "prompt/image", "source script + visual style + image goal", "image prompt task"),
+        canonical_entry(&files, 22, "independent_prompt", "独立提示词", "Video Prompt Generation / 视频提示词", "promptSlug=video_prompt_generation", "/video", "PromptLab(video)", "prompt/video", "script beats + video style + motion focus", "video prompt task"),
+        canonical_entry(&files, 23, "prompt_review", "提示词审核", "Prompt Review / 提示词质量审核", "promptSlug=prompt_review", "/frame-prompt", "PromptLab + FramePromptLab", "prompt/image-review + prompt/video-review + prompt/quality-check", "generated prompt output", "prompt review score/issues/suggestions"),
+    ];
+
+    json!({
+        "version": 1,
+        "source": "src-tauri/src/llm/prompts/manifest.json",
+        "authority": manifest["authority"].clone(),
+        "promptManifestVersion": manifest["version"].clone(),
+        "total": entries.len(),
+        "manifestTotal": manifest["total"].clone(),
+        "exactMatches": manifest["exactMatches"].clone(),
+        "failures": manifest["failures"].clone(),
+        "entries": entries,
+    })
+}
 
 /// Build system prompt and user message for a given LLM context type.
 pub fn build_prompt(context_type: &str, params: &Value) -> (String, String) {

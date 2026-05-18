@@ -77,8 +77,9 @@ Some original prompts intentionally contain literal `\\n` sequences. Do not norm
 Run real app actions that trigger model calls. Then verify:
 
 ```bash
-ls data/debug-prompts
-cat data/debug-prompts/prompt_hash_index.jsonl | tail -20
+PROMPT_AUDIT_DIR="${SCRIPTSTACK_PROMPT_AUDIT_DIR:-$HOME/Library/Application Support/ScriptStack/debug-prompts}"
+ls "$PROMPT_AUDIT_DIR"
+cat "$PROMPT_AUDIT_DIR/prompt_hash_index.jsonl" | tail -20
 ```
 
 Expected output exists for these chains:

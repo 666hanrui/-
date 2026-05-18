@@ -59,33 +59,33 @@ export default function ScriptSelector({ selectedTaskId, onSelect }: ScriptSelec
   };
 
   return (
-    <div className="card">
-      <div className="section-head">
+    <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="eyebrow">Script Source</p>
-          <h3>选择剧本</h3>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-white/35">Script Source</p>
+          <h3 className="mt-1 text-base font-bold text-white">选择剧本</h3>
         </div>
-        <button className="btn ghost" onClick={loadTasks} disabled={isLoading} title="刷新">
-          {isLoading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
+        <button className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-40" onClick={loadTasks} disabled={isLoading} title="刷新">
+          {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
         </button>
       </div>
-      {error && <div className="error">{error}</div>}
-      <div className="table-list">
-        {tasks.length === 0 && <div className="empty">还没有可承接的剧本任务</div>}
+      {error && <div className="mb-3 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+      <div className="space-y-2">
+        {tasks.length === 0 && <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 text-sm text-white/35">还没有可承接的剧本任务</div>}
         {tasks.map((task) => {
           const taskId = getTaskId(task);
           const active = selectedTaskId === taskId;
           return (
             <button
               key={taskId || JSON.stringify(task)}
-              className={`row-card select-row ${active ? "active" : ""}`}
+              className={`w-full rounded-xl border p-3 text-left transition-all ${active ? "border-indigo-400/45 bg-indigo-500/15 shadow-[0_0_18px_rgba(99,102,241,0.12)]" : "border-white/[0.06] bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.06]"}`}
               onClick={() => choose(task)}
             >
-              <span>
-                <span className="row-title">
+              <span className="block min-w-0">
+                <span className="flex items-center gap-2 truncate text-sm font-bold text-white/85">
                   <FileText size={15} /> {getProjectName(task)}
                 </span>
-                <span className="row-meta">
+                <span className="mt-1 block truncate text-[11px] font-mono text-white/35">
                   {task.mode || "script"} · {task.stage || "ready"} · {formatDate(getUpdatedAt(task))}
                 </span>
               </span>

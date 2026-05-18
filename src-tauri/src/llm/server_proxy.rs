@@ -1,6 +1,7 @@
 use crate::llm::config::RuntimeConfig;
 use sha2::{Digest, Sha256};
 use std::io::Write;
+use std::path::PathBuf;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ContextualLlmParams {
@@ -556,9 +557,7 @@ fn dump_prompt_audit(
         .map(|d| d.as_millis())
         .unwrap_or(0);
 
-    let mut dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    dir.push("data");
-    dir.push("debug-prompts");
+    let dir = prompt_audit_dir();
     if std::fs::create_dir_all(&dir).is_err() { return; }
 
     let audit = serde_json::json!({
@@ -599,6 +598,46 @@ fn dump_prompt_audit(
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(index_path) {
         let _ = writeln!(file, "{}", index);
     }
+}
+
+fn prompt_audit_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("SCRIPTSTACK_PROMPT_AUDIT_DIR") {
+        if !dir.trim().is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("ScriptStack")
+                .join("debug-prompts");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("ScriptStack").join("debug-prompts");
+        }
+    }
+
+    if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
+        return PathBuf::from(xdg).join("ScriptStack").join("debug-prompts");
+    }
+
+    if let Some(home) = std::env::var_os("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("ScriptStack")
+            .join("debug-prompts");
+    }
+
+    std::env::temp_dir().join("ScriptStack").join("debug-prompts")
 }
 
 fn prompt_slug_file(slug: &str) -> String {

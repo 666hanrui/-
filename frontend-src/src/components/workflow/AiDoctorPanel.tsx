@@ -10,7 +10,7 @@ export default function AiDoctorPanel() {
   const {
     isDoctorPanelOpen,
     setDoctorPanelOpen,
-    currentProjectId,
+    currentWorkflowProjectId,
   } = useAppStore();
 
   const [query, setQuery] = useState("");
@@ -30,7 +30,8 @@ export default function AiDoctorPanel() {
 
   useEffect(() => {
     const unlisten = listen("doctor:stream-chunk", (event: any) => {
-      const { chunk } = event.payload;
+      const { chunk, projectId } = event.payload || {};
+      if (projectId && currentWorkflowProjectId && projectId !== currentWorkflowProjectId) return;
       setLogs((prev) => {
         const newLogs = [...prev];
         const lastLog = newLogs[newLogs.length - 1];
@@ -42,10 +43,17 @@ export default function AiDoctorPanel() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [currentWorkflowProjectId]);
 
   const handleAsk = async () => {
     if (!query.trim()) return;
+    if (!currentWorkflowProjectId) {
+      setLogs((prev) => [
+        ...prev,
+        { role: "sys", text: "ERROR: 当前没有绑定工作流项目，无法运行剧本医生。" },
+      ]);
+      return;
+    }
     const userQ = query;
     setQuery("");
     setLogs((prev) => [...prev, { role: "user", text: userQ }]);
@@ -53,7 +61,7 @@ export default function AiDoctorPanel() {
     try {
       await invoke(
         "workflow/doctor",
-        { question: userQ, projectId: currentProjectId },
+        { question: userQ, projectId: currentWorkflowProjectId },
         { silent: true }
       );
     } catch (err: any) {

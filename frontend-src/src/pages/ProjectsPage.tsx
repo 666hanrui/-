@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderKanban, Trash2, Edit2, Play, FileText, Library, Image as ImageIcon, Film, Layers3, Clapperboard, Clock, Loader2, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderKanban, Trash2, Edit2, Play, FileText, Library, Image as ImageIcon, Film, Layers3, Clapperboard, Clock, Loader2, Check, X } from 'lucide-react';
 import { useTudouBridge } from '../hooks/useTudouBridge';
 import { useAppStore } from '../store/useAppStore';
 import PageShell from '../components/ui/PageShell';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import Panel from '../components/ui/Panel';
-import ContextMetricGrid from '../components/ui/ContextMetricGrid';
 import ActionBar, { ActionButton } from '../components/ui/ActionBar';
 import EmptyState from '../components/ui/EmptyState';
 import { TextInput } from '../components/ui/FormField';
@@ -48,13 +47,14 @@ const workflowStatusLabel = (status: string, isZh: boolean) => {
 export default function ProjectsPage() {
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
-  const { setCurrentProjectId, setCurrentTaskId, setScriptSeed, setCurrentStep, setRealm, language, showToast } = useAppStore();
+  const { setCurrentProjectId, setCurrentWorkflowProjectId, setCurrentTaskId, setScriptSeed, setCurrentStep, setRealm, language, showToast } = useAppStore();
   const isZh = language === 'zh';
 
   const [projects, setProjects] = useState<ArchiveProject[]>([]);
   const [isFetching, setIsFetching] = useState(true);
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const taskIdOf = (task: any) => task?.taskId || task?.task_id || task?.id || '';
 
@@ -187,18 +187,21 @@ export default function ProjectsPage() {
   };
 
   const openWorkflowProject = (project: ArchiveProject) => {
-    setCurrentProjectId(project.projectId);
+    if (project.source !== 'screenplay') return;
+    const taskId = primaryScriptTask(project);
+    setCurrentWorkflowProjectId(project.projectId);
+    setCurrentProjectId(taskId ? null : project.projectId);
     const init = project.raw?.init || {};
     setScriptSeed(init.concept || init.name || project.projectName);
     setCurrentStep(Math.max(0, Number(project.currentStep || 1) - 1));
-    const taskId = primaryScriptTask(project);
     setCurrentTaskId(taskId ? taskId : null);
     navigate('/workflow');
   };
 
   const openTask = (project: ArchiveProject, stage: 'scripts' | 'assets' | 'image' | 'video' | 'frame-prompt' | 'seedance') => {
-    setCurrentProjectId(project.source === 'screenplay' ? project.projectId : null);
     const taskId = primaryScriptTask(project);
+    if (project.source === 'screenplay') setCurrentWorkflowProjectId(project.projectId);
+    setCurrentProjectId(project.source === 'screenplay' ? null : project.projectId || null);
     setCurrentTaskId(taskId ? taskId : null);
     const init = project.raw?.init || {};
     setScriptSeed(init.concept || init.name || project.projectName);
@@ -210,13 +213,31 @@ export default function ProjectsPage() {
     else openTask(project, stage);
   };
 
+  const projectGroups = [
+    {
+      id: 'drafting',
+      title: isZh ? '推进中' : 'In Progress',
+      items: projects.filter((project) => project.source === 'screenplay' && project.status !== 'finalized'),
+    },
+    {
+      id: 'finalized',
+      title: isZh ? '已成稿' : 'Finalized',
+      items: projects.filter((project) => project.source === 'screenplay' && project.status === 'finalized'),
+    },
+    {
+      id: 'tasks',
+      title: isZh ? '后期任务' : 'Post Pipeline',
+      items: projects.filter((project) => project.source !== 'screenplay'),
+    },
+  ].filter((group) => group.items.length > 0);
+
   return (
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<FolderKanban size={24} />}
         eyebrow="System Console"
         title={isZh ? '项目控制台' : 'Project Console'}
-        subtitle={isZh ? '统一的数据恢复与项目流转中枢。选择项目即可衔接到工作流、剧本、资产、Prompt 或 Seedance。' : 'Unified recovery and routing center. Select a project to resume your workspace.'}
+        subtitle={isZh ? '统一的正本流程流转中枢。选择项目即可衔接到工作流、剧本、资产、Prompt 或 Seedance。' : 'Unified canonical routing center. Select a project to continue the original flow.'}
         actions={<ActionButton onClick={() => navigate('/')} icon={<Play size={16} />}>{isZh ? '新建工作流' : 'New Workflow'}</ActionButton>}
       />
 
@@ -230,86 +251,103 @@ export default function ProjectsPage() {
           primaryAction={<ActionButton onClick={() => navigate('/')}>{isZh ? '创建新项目' : 'Create Project'}</ActionButton>}
         />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-4">
-          {projects.map((project) => {
-            const editKey = `${project.source}:${project.projectId}`;
-            const isRenaming = renameId === editKey;
-            const taskId = primaryScriptTask(project);
-            const hasTask = Boolean(taskId);
-            const shortProjectId = project.projectId ? project.projectId.split('-')[0] : 'N/A';
-            const shortTaskId = taskId ? taskId.split('-')[0] : 'N/A';
-            const isWorkflowProject = project.source === 'screenplay';
-            const doneCount = project.doneSteps.length;
-            const stepText = project.currentStep ? `Step ${project.currentStep}/8` : 'N/A';
-            const progressPercent = project.currentStep ? Math.min(100, Math.max(0, (project.currentStep / 8) * 100)) : 0;
-
-            return (
-              <Panel
-                key={editKey}
-                title={isRenaming ? (
-                  <div className="flex items-center gap-2">
-                    <TextInput value={renameValue} onChange={(event: any) => setRenameValue(event.target.value)} autoFocus />
-                    <ActionButton size="sm" variant="ghost" onClick={cancelRename} icon={<X size={14} />} />
-                    <ActionButton size="sm" variant="primary" onClick={() => saveRename(project)} icon={<Check size={14} />} />
-                  </div>
-                ) : project.projectName}
-                subtitle={!isRenaming && (
-                  <div className="flex items-center gap-2 mt-1.5 text-xs">
-                    <span className={`px-2 py-0.5 rounded font-mono ${project.source === 'screenplay' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-cyan-500/20 text-cyan-300'}`}>{project.source === 'screenplay' ? 'WORKFLOW' : 'SQLITE / TASK'}</span>
-                    <span className="px-2 py-0.5 rounded bg-white/[0.04] text-white/45 font-mono">{workflowStatusLabel(project.status, isZh)}</span>
-                    <span className="flex items-center gap-1 text-white/40"><Clock size={10} /> {project.latestDate ? new Date(project.latestDate).toLocaleString() : 'N/A'}</span>
-                  </div>
-                )}
-                actions={!isRenaming && (
-                  <>
-                    <ActionButton variant="ghost" size="sm" icon={<Edit2 size={14} />} onClick={() => startRename(project)} title={isZh ? '重命名' : 'Rename'} />
-                    <ActionButton variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={() => removeProject(project)} title={isZh ? '删除' : 'Delete'} />
-                  </>
-                )}
-              >
-                <div className="flex flex-col gap-6">
-                  <ContextMetricGrid metrics={[
-                    { label: 'Project ID', value: shortProjectId, copyable: project.source === 'screenplay' ? project.projectId : undefined, isMono: true },
-                    { label: 'Script Task ID', value: shortTaskId, copyable: taskId || undefined, isMono: true },
-                    { label: isZh ? '工作流进度' : 'WF Stage', value: isWorkflowProject ? stepText : '非工作流项目' },
-                    { label: isZh ? '完成步骤' : 'Done', value: isWorkflowProject ? `${doneCount}/8` : 'N/A' },
-                  ]} />
-
-                  {isWorkflowProject && (
-                    <div className="rounded-2xl border border-white/[0.06] bg-black/20 p-4 space-y-3">
-                      <div className="flex items-center justify-between text-xs text-white/50">
-                        <span>{isZh ? '真实工作流恢复状态' : 'Workflow recovery state'}</span>
-                        <span className="font-mono">{stepText} · done {doneCount}/8 · versions {project.versionCount}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-                        <div className="h-full rounded-full bg-indigo-400/70 transition-all" style={{ width: `${progressPercent}%` }} />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-[11px] text-white/40 font-mono">
-                        <span>status: {project.status}</span>
-                        <span>versions: {project.versionCount}</span>
-                        <span>active: {project.activeVersionCount}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col gap-3">
-                    <div className="text-xs font-bold text-white/50 tracking-widest uppercase border-b border-white/5 pb-2 mb-1">{isZh ? '恢复入口' : 'Recovery Entrypoints'}</div>
-                    <ActionBar className="flex-wrap" align="left">
-                      <ActionButton size="sm" variant={isWorkflowProject ? 'primary' : 'ghost'} disabled={!isWorkflowProject} icon={<Play size={14} />} onClick={() => handleRoute(project, 'workflow')} title={!isWorkflowProject ? '这不是 WORKFLOW 项目，不能恢复 Step 1-8' : '恢复 Step 1-8 八步工作流'}>恢复八步工作流</ActionButton>
-                      <div className="w-px h-6 bg-white/10 mx-1" />
-                      <ActionButton size="sm" variant={hasTask ? 'primary' : 'secondary'} icon={<FileText size={14} />} onClick={() => handleRoute(project, 'scripts')}>剧本任务</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Library size={14} />} onClick={() => handleRoute(project, 'assets')} title={!hasTask ? '需 Script Task' : ''}>资产</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<ImageIcon size={14} />} onClick={() => handleRoute(project, 'image')} title={!hasTask ? '需 Script Task' : ''}>图像</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Film size={14} />} onClick={() => handleRoute(project, 'video')} title={!hasTask ? '需 Script Task' : ''}>视频</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Layers3 size={14} />} onClick={() => handleRoute(project, 'frame-prompt')} title={!hasTask ? '需 Script Task' : ''}>逐镜</ActionButton>
-                      <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Clapperboard size={14} />} onClick={() => handleRoute(project, 'seedance')} title={!hasTask ? '需 Script Task' : ''}>Seedance</ActionButton>
-                    </ActionBar>
-                  </div>
+        <Panel title={isZh ? '项目队列' : 'Project Queue'} noPadding>
+          <div className="divide-y divide-white/[0.06]">
+            {projectGroups.map((group) => (
+              <section key={group.id}>
+                <div className="flex items-center justify-between px-5 py-3 bg-white/[0.025]">
+                  <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-white/45">{group.title}</div>
+                  <div className="text-xs font-mono text-white/35">{group.items.length}</div>
                 </div>
-              </Panel>
-            );
-          })}
-        </div>
+                <div className="divide-y divide-white/[0.045]">
+                  {group.items.map((project) => {
+                    const editKey = `${project.source}:${project.projectId}`;
+                    const isRenaming = renameId === editKey;
+                    const isExpanded = expandedId === editKey;
+                    const taskId = primaryScriptTask(project);
+                    const hasTask = Boolean(taskId);
+                    const isWorkflowProject = project.source === 'screenplay';
+                    const doneCount = project.doneSteps.length;
+                    const stepText = project.currentStep ? `Step ${project.currentStep}/8` : 'N/A';
+                    const progressPercent = project.currentStep ? Math.min(100, Math.max(0, (project.currentStep / 8) * 100)) : 0;
+                    return (
+                      <div key={editKey} className="bg-black/[0.08]">
+                        <div className="grid grid-cols-[32px_1fr_auto] items-center gap-3 px-5 py-3 hover:bg-white/[0.035] transition-colors">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(isExpanded ? null : editKey)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/45 hover:bg-white/[0.06] hover:text-white"
+                            title={isExpanded ? '收起' : '展开'}
+                          >
+                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+
+                          <div className="min-w-0">
+                            {isRenaming ? (
+                              <div className="flex items-center gap-2">
+                                <TextInput value={renameValue} onChange={(event: any) => setRenameValue(event.target.value)} autoFocus />
+                                <ActionButton size="sm" variant="ghost" onClick={cancelRename} icon={<X size={14} />} />
+                                <ActionButton size="sm" variant="primary" onClick={() => saveRename(project)} icon={<Check size={14} />} />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="truncate text-sm font-bold text-white/88">{project.projectName}</span>
+                                  <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-mono ${isWorkflowProject ? 'bg-indigo-500/18 text-indigo-300' : 'bg-cyan-500/16 text-cyan-300'}`}>
+                                    {isWorkflowProject ? 'WORKFLOW' : 'TASK'}
+                                  </span>
+                                  <span className="shrink-0 rounded bg-white/[0.04] px-2 py-0.5 text-[10px] font-mono text-white/40">{workflowStatusLabel(project.status, isZh)}</span>
+                                </div>
+                                <div className="mt-1 flex items-center gap-3 text-[11px] text-white/35">
+                                  <span className="font-mono">{isWorkflowProject ? stepText : project.moduleType}</span>
+                                  <span className="font-mono">{hasTask ? `task ${taskId.slice(0, 8)}` : 'no task'}</span>
+                                  <span className="flex items-center gap-1"><Clock size={10} /> {project.latestDate ? new Date(project.latestDate).toLocaleString() : 'N/A'}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {!isRenaming && (
+                            <div className="flex items-center gap-2">
+                              <ActionButton size="sm" variant={isWorkflowProject ? 'primary' : 'secondary'} disabled={!isWorkflowProject} icon={<Play size={14} />} onClick={() => handleRoute(project, 'workflow')}>{isZh ? '工作流' : 'Workflow'}</ActionButton>
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<FileText size={14} />} onClick={() => handleRoute(project, 'scripts')}>{isZh ? '剧本' : 'Script'}</ActionButton>
+                              <ActionButton variant="ghost" size="sm" icon={<Edit2 size={14} />} onClick={() => startRename(project)} title={isZh ? '重命名' : 'Rename'} />
+                              <ActionButton variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={() => removeProject(project)} title={isZh ? '删除' : 'Delete'} />
+                            </div>
+                          )}
+                        </div>
+
+                        {isExpanded && !isRenaming && (
+                          <div className="ml-[68px] mr-5 mb-4 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3">
+                            {isWorkflowProject && (
+                              <div className="mb-3">
+                                <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                                  <div className="h-full rounded-full bg-indigo-400/70" style={{ width: `${progressPercent}%` }} />
+                                </div>
+                                <div className="flex flex-wrap gap-3 text-[11px] text-white/38">
+                                  <span>{stepText}</span>
+                                  <span>{isZh ? '完成' : 'done'} {doneCount}/8</span>
+                                  <span>versions {project.versionCount}</span>
+                                </div>
+                              </div>
+                            )}
+                            <ActionBar className="flex-wrap" align="left">
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Library size={14} />} onClick={() => handleRoute(project, 'assets')}>资产</ActionButton>
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<ImageIcon size={14} />} onClick={() => handleRoute(project, 'image')}>图像</ActionButton>
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Film size={14} />} onClick={() => handleRoute(project, 'video')}>视频</ActionButton>
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Layers3 size={14} />} onClick={() => handleRoute(project, 'frame-prompt')}>逐镜</ActionButton>
+                              <ActionButton size="sm" variant="secondary" disabled={!hasTask} icon={<Clapperboard size={14} />} onClick={() => handleRoute(project, 'seedance')}>Seedance</ActionButton>
+                            </ActionBar>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        </Panel>
       )}
     </PageShell>
   );

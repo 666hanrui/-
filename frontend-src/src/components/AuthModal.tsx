@@ -65,15 +65,14 @@ export default function AuthModal() {
           username?: string;
           token?: string;
         }>("auth/status", {}, { silent: true });
-        if (!res.loggedIn && !user) {
+        if (!res.loggedIn) {
+          if (user) setUser(null);
           setShowModal(true);
         } else if (res.loggedIn) {
           setUser({
             username: res.username || user?.username || "Creator",
             token: res.token || user?.token || "",
           });
-          setShowModal(false);
-        } else if (user?.token) {
           setShowModal(false);
         }
       } catch (err) {

@@ -21,6 +21,7 @@ const projectIdOf = (project: ProjectRecord | null | undefined, fallback = '') =
 const linkedTaskIdOf = (project: ProjectRecord | null | undefined) => asProject(project).linkedScriptTaskId || asProject(project).linked_script_task_id || null;
 const backendStepOf = (project: ProjectRecord | null | undefined, fallback = 1) => Number(asProject(project).currentStep || asProject(project).current_step || fallback);
 const shortId = (value?: string | null) => value ? value.split('-')[0] : 'N/A';
+const looksLikeWorkflowProjectId = (value?: string | null) => Boolean(value && value.startsWith('sp_'));
 
 export default function WorkflowValley() {
   const {
@@ -31,6 +32,8 @@ export default function WorkflowValley() {
     setScriptSeed,
     currentProjectId,
     setCurrentProjectId,
+    currentWorkflowProjectId,
+    setCurrentWorkflowProjectId,
     currentTaskId,
     setCurrentTaskId,
     isDoctorPanelOpen,
@@ -44,6 +47,7 @@ export default function WorkflowValley() {
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [error, setError] = useState('');
   const [staleProjectId, setStaleProjectId] = useState<string | null>(null);
+  const workflowProjectId = currentWorkflowProjectId || (looksLikeWorkflowProjectId(currentProjectId) ? currentProjectId : null);
 
   useEffect(() => {
     setRealm('valley');
@@ -52,31 +56,75 @@ export default function WorkflowValley() {
   const clearStaleWorkflow = (projectId: string, message: string) => {
     setProject(null);
     setStaleProjectId(projectId);
-    setCurrentProjectId(null);
+    setCurrentWorkflowProjectId(null);
+    if (currentProjectId === projectId) setCurrentProjectId(null);
     setError(message);
     showToast(message);
   };
 
-  const reloadProject = async () => {
-    if (!currentProjectId) return;
-    const requestedProjectId = currentProjectId;
+  const restoreWorkflowFromTask = async (taskId: string) => {
+    const rows = await invoke<any[]>('screenplay/list-recent', { limit: 200 }, { silent: true }).catch(() => []);
+    const hit = (Array.isArray(rows) ? rows : []).find((item) => linkedTaskIdOf(item as any) === taskId);
+    if (!hit) return null;
+    const nextId = projectIdOf(hit as any);
+    if (nextId) {
+      setCurrentWorkflowProjectId(nextId);
+    }
+    return hit as ProjectRecord;
+  };
+
+  const applyWorkflowProject = (next: ProjectRecord, requestedProjectId: string) => {
+    setStaleProjectId(null);
+    setProject(next);
+    const nextProjectId = projectIdOf(next, requestedProjectId);
+    const init = asProject(next).init || {};
+    const linkedTaskId = linkedTaskIdOf(next) || currentTaskId || null;
+    setScriptSeed(String(init.concept || init.name || scriptSeed || ''));
+    setCurrentWorkflowProjectId(nextProjectId);
+    setCurrentTaskId(linkedTaskId);
+    if (!linkedTaskId) {
+      if (!currentProjectId || looksLikeWorkflowProjectId(currentProjectId)) setCurrentProjectId(nextProjectId);
+    } else if (currentProjectId === nextProjectId || looksLikeWorkflowProjectId(currentProjectId)) {
+      setCurrentProjectId(null);
+    }
+    const backendStep = backendStepOf(next, 1);
+    const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
+    setCurrentStep(nextIndex);
+  };
+
+  const reloadProject = async (projectIdOverride?: string | null) => {
+    const requestedProjectId = projectIdOverride || workflowProjectId;
+    if (!requestedProjectId) {
+      if (currentTaskId) {
+        setIsLoadingProject(true);
+        setError('');
+        try {
+          const hit = await restoreWorkflowFromTask(currentTaskId);
+          if (hit) applyWorkflowProject(hit, projectIdOf(hit, ''));
+        } catch (err: any) {
+          setError(err.message || '尝试通过剧本任务恢复工作流失败');
+        } finally {
+          setIsLoadingProject(false);
+        }
+      }
+      return;
+    }
     setIsLoadingProject(true);
     setError('');
     try {
       const next = await invoke<ProjectRecord | null>('screenplay/get', { projectId: requestedProjectId }, { silent: true });
       if (!next) {
+        if (currentTaskId) {
+          const hit = await restoreWorkflowFromTask(currentTaskId);
+          if (hit) {
+            applyWorkflowProject(hit, projectIdOf(hit, requestedProjectId));
+            return;
+          }
+        }
         clearStaleWorkflow(requestedProjectId, '未找到该工作流项目。已清除失效的工作流选择，请从项目库重新选择，或继续使用已有剧本任务进入资产/Prompt 页面。');
         return;
       }
-      setStaleProjectId(null);
-      setProject(next);
-      const init = asProject(next).init || {};
-      setScriptSeed(String(init.concept || init.name || scriptSeed || ''));
-      setCurrentProjectId(projectIdOf(next, requestedProjectId));
-      setCurrentTaskId(linkedTaskIdOf(next) || currentTaskId || null);
-      const backendStep = backendStepOf(next, 1);
-      const nextIndex = Math.max(0, Math.min(WORKFLOW_STEPS.length - 1, backendStep - 1));
-      setCurrentStep(nextIndex);
+      applyWorkflowProject(next, requestedProjectId);
     } catch (err: any) {
       setError(err.message || '恢复工作流项目失败');
     } finally {
@@ -87,7 +135,7 @@ export default function WorkflowValley() {
   useEffect(() => {
     reloadProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProjectId]);
+  }, [workflowProjectId, currentTaskId]);
 
   const activeStep = WORKFLOW_STEPS[currentStep] || WORKFLOW_STEPS[0];
   const activeVersion = useMemo(() => getActiveVersion(project, activeStep.id), [project, activeStep.id]);
@@ -116,10 +164,20 @@ export default function WorkflowValley() {
     reloadProject();
   };
 
-  if (!currentProjectId && staleProjectId) {
+  if (!workflowProjectId && isLoadingProject) {
     return (
       <PageShell maxWidth="max-w-5xl">
-        <Panel title="当前工作流项目锚点已失效" subtitle="Workflow Recovery" actions={<AlertTriangle size={18} className="text-red-300" />}>
+        <Panel title="正在恢复工作流上下文" subtitle="Workflow Context Recovery" actions={<Loader2 size={18} className="animate-spin text-indigo-300" />}>
+          <div className="text-white/55 text-sm leading-6">正在根据当前 Script Task 查找它对应的 screenplay 工作流项目。</div>
+        </Panel>
+      </PageShell>
+    );
+  }
+
+  if (!workflowProjectId && staleProjectId) {
+    return (
+      <PageShell maxWidth="max-w-5xl">
+        <Panel title="当前工作流项目锚点已失效" subtitle="Project Anchor Check" actions={<AlertTriangle size={18} className="text-red-300" />}>
           <div className="space-y-6">
             <p className="text-white/60 text-sm leading-6">前端保存的工作流项目 ID 在当前本地项目文件目录中找不到。资产、剧本任务、Prompt 记录可能仍在 SQLite 中，不代表数据全部丢失。</p>
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-100 text-sm font-mono break-all">失效 Project ID：{staleProjectId}</div>
@@ -135,7 +193,7 @@ export default function WorkflowValley() {
     );
   }
 
-  if (!currentProjectId && currentTaskId) {
+  if (!workflowProjectId && currentTaskId) {
     return (
       <PageShell maxWidth="max-w-5xl">
         <Panel title="已选择剧本任务，但没有工作流项目" subtitle="Task Handoff" actions={<FileText size={18} className="text-cyan-300" />}>
@@ -157,13 +215,13 @@ export default function WorkflowValley() {
     );
   }
 
-  if (!currentProjectId && !scriptSeed) {
+  if (!workflowProjectId) {
     return (
       <PageShell maxWidth="max-w-5xl">
         <EmptyState
           icon={<Wand2 size={34} />}
-          title="引擎缺少初始参数"
-          description="请返回灵感枢纽输入宇宙碎片，或从项目库打开已有工作流项目。"
+          title={scriptSeed ? '缺失工作流项目锚点' : '引擎缺少初始参数'}
+          description={scriptSeed ? '当前只恢复到了故事种子，但没有可用于 Step 1-8 的 screenplay 工作流项目 ID。请从项目库打开 WORKFLOW 项目，或返回灵感枢纽重新创建。' : '请返回灵感枢纽输入宇宙碎片，或从项目库打开已有工作流项目。'}
           primaryAction={<ActionButton onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>打开项目库</ActionButton>}
           secondaryAction={<ActionButton variant="secondary" onClick={() => navigate('/')} icon={<Wand2 size={16} />}>返回枢纽</ActionButton>}
         />
@@ -172,12 +230,12 @@ export default function WorkflowValley() {
   }
 
   return (
-    <PageShell maxWidth="max-w-full" className="overflow-hidden">
+    <PageShell maxWidth="max-w-full" scroll={false}>
       <ModuleHeader
         icon={<Wand2 size={24} />}
-        eyebrow="Workflow Sequence"
+        eyebrow="Canonical Screenplay Flow"
         title="八步工作流 / 剧本生成引擎"
-        subtitle="Step 1-8 的生成、自检、保存覆写、checkpoint 与 finalize 仍由 StepEngine 执行。当前页面只负责流程外壳、上下文与恢复。"
+        subtitle="严格对应 screenplay_step 1-8、screenplay_selfcheck、screenplay_checkpoint。StepEngine 负责生成、自检、保存覆写、checkpoint 与 finalize。"
         actions={
           <ActionBar align="right" className="flex-wrap">
             <ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton>
@@ -189,18 +247,18 @@ export default function WorkflowValley() {
       />
 
       <ContextMetricGrid metrics={[
-        { label: 'Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true },
+        { label: 'Workflow Project', value: workflowProjectId || '未绑定', copyable: workflowProjectId || undefined, isMono: true },
+        { label: 'Downstream Project', value: currentProjectId || '未绑定', copyable: currentProjectId || undefined, isMono: true },
         { label: 'Script Task', value: currentTaskId || '未生成', copyable: currentTaskId || undefined, isMono: true },
         { label: 'Backend Step', value: `${backendCurrentStep}` },
-        { label: 'Done Steps', value: `${completedCount}/${WORKFLOW_STEPS.length}` },
       ]} />
 
       {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-200 text-sm flex items-center gap-2"><AlertTriangle size={16} /> {error}</div>}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6 min-h-[calc(100vh-260px)]">
-        <aside className="space-y-6 min-w-0">
-          <Panel title="Workflow Stepper" subtitle={projectTitle} noPadding>
-            <div className="p-4 max-h-[calc(100vh-360px)] overflow-y-auto custom-scrollbar space-y-3">
+      <div className="grid flex-1 grid-cols-1 xl:grid-cols-[360px_1fr] gap-6 min-h-0">
+        <aside className="flex min-h-0 min-w-0 flex-col gap-6">
+          <Panel title="Workflow Stepper" subtitle={projectTitle} className="flex-1" noPadding>
+            <div className="h-full p-4 overflow-y-auto custom-scrollbar space-y-3">
               {WORKFLOW_STEPS.map((step, index) => {
                 const isActive = currentStep === index;
                 const isCompleted = doneSteps.includes(step.id);
@@ -225,13 +283,13 @@ export default function WorkflowValley() {
             </div>
           </Panel>
 
-          <Panel title="Genesis Seed" subtitle="当前项目种子">
-            <div className="text-sm text-white/70 leading-relaxed max-h-[180px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">{scriptSeed || projectAny.init?.concept || projectAny.init?.name || '未命名项目'}</div>
+          <Panel title="Genesis Seed" subtitle="当前项目种子" className="shrink-0">
+            <div className="text-sm text-white/70 leading-relaxed max-h-[120px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">{scriptSeed || projectAny.init?.concept || projectAny.init?.name || '未命名项目'}</div>
           </Panel>
         </aside>
 
-        <main className="min-w-0 relative">
-          <Panel title={activeStep.title} subtitle={`Step ${activeStep.id} · ${activeStep.desc}`} className="h-full min-h-[calc(100vh-280px)]" noPadding>
+        <main className="min-w-0 min-h-0 relative">
+          <Panel title={activeStep.title} subtitle={`Step ${activeStep.id} · ${activeStep.desc}`} className="h-full min-h-0" noPadding>
             {isLoadingProject && <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm"><div className="flex items-center gap-3 text-white/70 bg-black/70 border border-white/10 px-5 py-3 rounded-2xl"><Loader2 size={18} className="animate-spin" /> 正在恢复工作流状态...</div></div>}
             <AnimatePresence initial={false} mode="wait" custom={direction}>
               <motion.div
@@ -246,7 +304,7 @@ export default function WorkflowValley() {
                 animate="center"
                 exit="exit"
                 transition={{ type: 'spring' as const, stiffness: 280, damping: 32 }}
-                className="w-full h-full p-4 overflow-hidden"
+                className="w-full h-full min-h-0 p-4 overflow-hidden"
               >
                 <StepEngine stepConfig={activeStep} isLastStep={currentStep === WORKFLOW_STEPS.length - 1} activeVersion={activeVersion} project={project} onProjectChanged={handleProjectChanged} onNext={() => handleStepChange(currentStep + 1)} />
               </motion.div>

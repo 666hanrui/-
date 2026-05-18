@@ -2,7 +2,13 @@ import React from 'react';
 import { Copy, Terminal } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
-export default function ResultViewer({ content, title = 'OUTPUT' }: { content: string; title?: string }) {
+interface ResultViewerProps {
+  content: string;
+  title?: string;
+  maxHeight?: string;
+}
+
+export default function ResultViewer({ content, title = 'OUTPUT', maxHeight = 'max-h-[400px]' }: ResultViewerProps) {
   const showToast = useAppStore((s) => s.showToast);
 
   const handleCopy = () => {
@@ -20,7 +26,7 @@ export default function ResultViewer({ content, title = 'OUTPUT' }: { content: s
           <Copy size={12} />
         </button>
       </div>
-      <div className="p-4 overflow-auto max-h-[400px] custom-scrollbar w-full">
+      <div className={`p-4 overflow-auto ${maxHeight} custom-scrollbar w-full`}>
         <pre className="text-[11px] text-green-400/80 font-mono whitespace-pre-wrap break-words leading-relaxed w-full">{content || 'NO DATA.'}</pre>
       </div>
     </div>

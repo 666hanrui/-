@@ -32,7 +32,31 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "assets", label: "资产锻造", eyebrow: "Assets", realm: "samurai" },
   { id: "image", label: "图像提示词", eyebrow: "Image Prompt", realm: "samurai" },
   { id: "video", label: "视频提示词", eyebrow: "Video Prompt", realm: "valley" },
+  { id: "frame-prompt", label: "逐镜提示词", eyebrow: "Frame Prompt", realm: "valley" },
   { id: "seedance", label: "Seedance", eyebrow: "Shot Units", realm: "valley" },
   { id: "projects", label: "项目库", eyebrow: "Archive", realm: "cloudcity" },
   { id: "settings", label: "本地设置", eyebrow: "Local Core", realm: "cloudcity" },
 ];
+
+export const IPC_TIMEOUTS = {
+  NORMAL: 30_000,
+  LONG: 120_000,
+  EXTREME: 900_000,
+} as const;
+
+export const UI_DEFAULTS = {
+  TOAST_DURATION: 2_200,
+  ANIMATION_MS: 350,
+} as const;
+
+export const NAV_ROUTES = [
+  { path: '/', label: '灵感枢纽', icon: 'Sparkles' },
+  { path: '/workflow', label: '工作流', icon: 'RouteIcon' },
+  { path: '/scripts', label: '剧本任务', icon: 'FileText' },
+  { path: '/assets', label: '资产矩阵', icon: 'Library' },
+  { path: '/image', label: '图像提示词', icon: 'ImageIcon' },
+  { path: '/video', label: '视频提示词', icon: 'Film' },
+  { path: '/seedance', label: 'Seedance', icon: 'Clapperboard' },
+  { path: '/frame-prompt', label: '逐帧', icon: 'LayoutPanelTop' },
+  { path: '/projects', label: '项目库', icon: 'FolderKanban' },
+] as const;

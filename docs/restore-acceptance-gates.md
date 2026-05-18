@@ -68,8 +68,9 @@ src-tauri/src/llm/prompts/manifest.json has activeSha256/rawSha256/archiveSha256
 Then run real model calls and verify:
 
 ```bash
-ls data/debug-prompts
-cat data/debug-prompts/prompt_hash_index.jsonl | tail -20
+PROMPT_AUDIT_DIR="${SCRIPTSTACK_PROMPT_AUDIT_DIR:-$HOME/Library/Application Support/ScriptStack/debug-prompts}"
+ls "$PROMPT_AUDIT_DIR"
+cat "$PROMPT_AUDIT_DIR/prompt_hash_index.jsonl" | tail -20
 ```
 
 Pass condition:

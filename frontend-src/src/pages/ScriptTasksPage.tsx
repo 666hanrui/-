@@ -12,6 +12,7 @@ import ContextMetricGrid from '../components/ui/ContextMetricGrid';
 import ActionBar, { ActionButton } from '../components/ui/ActionBar';
 import EmptyState from '../components/ui/EmptyState';
 import FormField, { TextArea, TextInput } from '../components/ui/FormField';
+import Collapsible from '../components/ui/Collapsible';
 
 function parseList(value: any): any[] {
   if (!value) return [];
@@ -306,9 +307,9 @@ export default function ScriptTasksPage() {
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<FileText size={24} />}
-        eyebrow="Script Recovery Console"
+        eyebrow="Canonical Script Flow"
         title="剧本任务 / 验收工作台"
-        subtitle="工作流 finalize、直接生成、导入已有剧本都会汇聚成同一种 script task，并承接资产、图像、视频、逐镜提示词和 Seedance。"
+        subtitle="严格对应 script_planning、script_writing、script_review。工作流 finalize、直接生成、导入已有剧本都会汇聚成同一种 script task，并承接资产、图像、视频、逐镜提示词和 Seedance。"
         actions={
           <ActionBar align="right" className="flex-wrap">
             <ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton>
@@ -363,42 +364,46 @@ export default function ScriptTasksPage() {
           </Panel>
         </aside>
 
-        <main className="grid grid-cols-1 2xl:grid-cols-[1fr_420px] gap-6 min-w-0">
+        <main className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6 min-w-0">
           <div className="space-y-6 min-w-0">
             <Panel
               title="生成新剧本"
               subtitle={selectedTaskId ? '可覆盖当前任务' : '将创建新 script task'}
               actions={<ActionButton onClick={generateScript} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成剧本</ActionButton>}
+              footer={
+                <ActionBar>
+                  <ActionButton variant="secondary" onClick={saveDraft} isLoading={busy === 'draft'} icon={<Save size={16} />}>新建草稿</ActionButton>
+                  <ActionButton onClick={generateScript} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成剧本</ActionButton>
+                </ActionBar>
+              }
             >
-              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                <FormField label="Mode"><TextInput value={mode} onChange={(event: any) => setMode(event.target.value)} /></FormField>
-                <FormField label="Duration"><TextInput value={duration} onChange={(event: any) => setDuration(event.target.value)} /></FormField>
-                <FormField label="Episodes"><TextInput value={episodes} onChange={(event: any) => setEpisodes(event.target.value)} /></FormField>
-                <FormField label="Genre"><TextInput value={genre} onChange={(event: any) => setGenre(event.target.value)} /></FormField>
-                <FormField label="Style"><TextInput value={style} onChange={(event: any) => setStyle(event.target.value)} /></FormField>
-                <FormField label="Output Mode"><TextInput value={outputMode} onChange={(event: any) => setOutputMode(event.target.value)} /></FormField>
-                <FormField label="Audience"><TextInput value={audience} onChange={(event: any) => setAudience(event.target.value)} /></FormField>
-                <FormField label="Tone"><TextInput value={tone} onChange={(event: any) => setTone(event.target.value)} /></FormField>
-                <FormField label="Ending"><TextInput value={ending} onChange={(event: any) => setEnding(event.target.value)} /></FormField>
-              </div>
+              <Collapsible title="生成参数" subtitle="Mode / Duration / Episodes / Genre / Style ...">
+                <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <FormField label="Mode"><TextInput value={mode} onChange={(event: any) => setMode(event.target.value)} /></FormField>
+                  <FormField label="Duration"><TextInput value={duration} onChange={(event: any) => setDuration(event.target.value)} /></FormField>
+                  <FormField label="Episodes"><TextInput value={episodes} onChange={(event: any) => setEpisodes(event.target.value)} /></FormField>
+                  <FormField label="Genre"><TextInput value={genre} onChange={(event: any) => setGenre(event.target.value)} /></FormField>
+                  <FormField label="Style"><TextInput value={style} onChange={(event: any) => setStyle(event.target.value)} /></FormField>
+                  <FormField label="Output Mode"><TextInput value={outputMode} onChange={(event: any) => setOutputMode(event.target.value)} /></FormField>
+                  <FormField label="Audience"><TextInput value={audience} onChange={(event: any) => setAudience(event.target.value)} /></FormField>
+                  <FormField label="Tone"><TextInput value={tone} onChange={(event: any) => setTone(event.target.value)} /></FormField>
+                  <FormField label="Ending"><TextInput value={ending} onChange={(event: any) => setEnding(event.target.value)} /></FormField>
+                </div>
+              </Collapsible>
               <div className="grid md:grid-cols-2 gap-4 mt-4">
-                <FormField label="剧情描述" helperText="不走八步，直接输入剧情概念、人物冲突、目标平台和风格要求。"><TextArea value={inputSummary} onChange={(event: any) => setInputSummary(event.target.value)} rows={6} /></FormField>
-                <FormField label="Custom Style" helperText="可选：补充结构、禁忌、语言、平台规则。"><TextArea value={customStyle} onChange={(event: any) => setCustomStyle(event.target.value)} rows={6} /></FormField>
+                <FormField label="剧情描述" helperText="不走八步，直接输入剧情概念、人物冲突、目标平台和风格要求。"><TextArea value={inputSummary} onChange={(event: any) => setInputSummary(event.target.value)} rows={3} /></FormField>
+                <FormField label="Custom Style" helperText="可选：补充结构、禁忌、语言、平台规则。"><TextArea value={customStyle} onChange={(event: any) => setCustomStyle(event.target.value)} rows={3} /></FormField>
               </div>
-              <ActionBar className="mt-5">
-                <ActionButton variant="secondary" onClick={saveDraft} isLoading={busy === 'draft'} icon={<Save size={16} />}>新建草稿</ActionButton>
-                <ActionButton onClick={generateScript} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成剧本</ActionButton>
-              </ActionBar>
             </Panel>
 
             <Panel title="正文编辑" subtitle="选择、生成或导入剧本后，可在这里编辑正文。" actions={<ActionBar><ActionButton variant="secondary" onClick={saveBody} disabled={!selectedTaskId} isLoading={busy === 'save'} icon={<Save size={16} />}>保存修改</ActionButton><ActionButton variant="primary" onClick={runReview} disabled={!selectedTaskId} isLoading={busy === 'review'} icon={<SearchCheck size={16} />}>运行审核</ActionButton></ActionBar>}>
-              <TextArea value={scriptBody} onChange={(event: any) => setScriptBody(event.target.value)} rows={24} placeholder="选择、生成或导入剧本后，可在这里编辑正文。" />
+              <TextArea value={scriptBody} onChange={(event: any) => setScriptBody(event.target.value)} rows={8} placeholder="选择、生成或导入剧本后，可在这里编辑正文。" />
             </Panel>
           </div>
 
           <aside className="space-y-6 min-w-0">
             <Panel title="导入已有剧本" subtitle="导入后会生成同一种 script_task + script_output。" actions={<ActionButton size="sm" variant="secondary" onClick={importScript} isLoading={busy === 'import'} icon={<Upload size={14} />}>导入</ActionButton>}>
-              <TextArea value={importBody} onChange={(event: any) => setImportBody(event.target.value)} rows={10} placeholder="粘贴已有剧本正文。" />
+              <TextArea value={importBody} onChange={(event: any) => setImportBody(event.target.value)} rows={3} placeholder="粘贴已有剧本正文。" />
             </Panel>
 
             {review ? (

@@ -73,4 +73,4 @@ npm run frontend:build
 cd src-tauri && cargo check && cargo test
 ```
 
-Then run a real prompt generation and trigger `prompt/quality-check` from the app. Confirm `data/debug-prompts/prompt_hash_index.jsonl` includes a `promptSlug=prompt_review` call.
+Then run a real prompt generation and trigger `prompt/quality-check` from the app. Confirm `$HOME/Library/Application Support/ScriptStack/debug-prompts/prompt_hash_index.jsonl` (or `SCRIPTSTACK_PROMPT_AUDIT_DIR` if overridden) includes a `promptSlug=prompt_review` call.

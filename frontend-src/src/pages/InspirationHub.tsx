@@ -1,18 +1,39 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useAnimation } from 'framer-motion';
-import { BookOpen, CornerDownLeft, FileText, FolderKanban, Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { CornerDownLeft, FileText, FolderKanban, Sparkles, Wand2 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useTudouBridge } from '../hooks/useTudouBridge';
 import PageShell from '../components/ui/PageShell';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import Panel from '../components/ui/Panel';
 import ActionBar, { ActionButton } from '../components/ui/ActionBar';
-import FormField, { TextArea, TextInput } from '../components/ui/FormField';
-import ContextMetricGrid from '../components/ui/ContextMetricGrid';
+import FormField, { SelectInput, TextArea, TextInput, Toggle } from '../components/ui/FormField';
+
+const DURATION_OPTIONS = ['30秒', '1分钟', '2分钟', '3分钟', '5分钟', '10分钟'];
+const FORMAT_OPTIONS = [
+  { value: 'short_drama', label: '短剧' },
+  { value: 'micro_movie', label: '小微电影' },
+  { value: 'feature_scene', label: '电影片段' },
+  { value: 'series_episode', label: '连续剧单集' },
+];
+const ULTRASHORT_OPTIONS = [
+  { value: 'vertical_short', label: '竖屏短视频' },
+  { value: 'horizontal_short', label: '横屏短片' },
+  { value: 'dialogue_scene', label: '对白场景' },
+  { value: 'montage', label: '蒙太奇' },
+];
+const GENRE_OPTIONS = ['短剧', '悬念', '反转', '恐怖', '爱情', '喜剧', '犯罪', '奇幻', '科幻', '家庭'];
+const MASTER_OPTIONS = [
+  { value: '', label: '不使用模板' },
+  { value: 'commercial_hook', label: '强商业钩子' },
+  { value: 'literary', label: '文学质感' },
+  { value: 'high_concept', label: '高概念类型片' },
+  { value: 'social_emotion', label: '社会情绪' },
+];
 
 export default function InspirationHub() {
-  const { setRealm, setScriptSeed, setCurrentProjectId, setCurrentTaskId, showToast } = useAppStore();
+  const { setRealm, setScriptSeed, setCurrentProjectId, setCurrentWorkflowProjectId, setCurrentTaskId, showToast } = useAppStore();
   const { invoke, isLoading } = useTudouBridge();
   const navigate = useNavigate();
 
@@ -21,7 +42,7 @@ export default function InspirationHub() {
   const [duration, setDuration] = useState('2分钟');
   const [format, setFormat] = useState('short_drama');
   const [ultrashortMode, setUltrashortMode] = useState('vertical_short');
-  const [genresText, setGenresText] = useState('短剧, 悬念, 反转');
+  const [genres, setGenres] = useState<string[]>(['短剧', '悬念', '反转']);
   const [chinese, setChinese] = useState(true);
   const [master, setMaster] = useState('');
   const [importedScript, setImportedScript] = useState('');
@@ -35,8 +56,11 @@ export default function InspirationHub() {
   }, [setRealm]);
 
   const concept = localSeed.trim() || importedScript.slice(0, 300).trim();
-  const genreList = genresText.split(/[，,]/).map((item) => item.trim()).filter(Boolean);
   const canStart = Boolean(localSeed.trim() || importedScript.trim());
+
+  const toggleGenre = (genre: string) => {
+    setGenres((prev) => prev.includes(genre) ? prev.filter((item) => item !== genre) : [...prev, genre]);
+  };
 
   const handleIgnite = async () => {
     if (!canStart) return;
@@ -47,7 +71,7 @@ export default function InspirationHub() {
       duration,
       format,
       ultrashortMode,
-      genres: genreList,
+      genres,
       chinese,
       master: master.trim() || undefined,
       importedScript: importedScript.trim() || undefined,
@@ -57,6 +81,8 @@ export default function InspirationHub() {
     try {
       const project = await invoke<{ projectId?: string; project_id?: string }>('project/create', init);
       const projectId = project.projectId || project.project_id || '';
+      if (!projectId) throw new Error('创建工作流未返回 projectId');
+      setCurrentWorkflowProjectId(projectId);
       setCurrentProjectId(projectId);
       setCurrentTaskId(null);
       setScriptSeed(concept);
@@ -74,7 +100,7 @@ export default function InspirationHub() {
         <ModuleHeader
           icon={<Sparkles size={26} />}
           eyebrow="Inspiration Hub"
-          title="灵感枢纽 / 新建工作流"
+          title="新建工作流"
           subtitle="输入核心概念或导入已有剧本，创建一个可恢复、可 finalize、可承接资产与 PromptLab 的工作流项目。"
           actions={
             <ActionBar align="right" className="flex-wrap">
@@ -85,61 +111,83 @@ export default function InspirationHub() {
           }
         />
 
-        <ContextMetricGrid metrics={[
-          { label: 'Path', value: importedScript.trim() ? 'import' : 'new' },
-          { label: 'Duration', value: duration },
-          { label: 'Format', value: format, isMono: true },
-          { label: 'Genres', value: genreList.length ? `${genreList.length} items` : '未设置' },
-        ]} />
-
         {error && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-red-200 text-sm">{error}</div>}
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
           <main className="space-y-6 min-w-0">
-            <Panel title="核心概念" subtitle="输入新故事的种子，或用已有剧本自动提取概念。">
-              <FormField label="核心概念 concept" helperText="支持 ⌘/Ctrl + Enter 直接创建工作流。">
+            <Panel title="核心概念">
+              <FormField label="核心概念">
                 <TextArea
                   ref={textareaRef as any}
                   value={localSeed}
                   onChange={(event: any) => setLocalSeed(event.target.value)}
                   onKeyDown={(event: any) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') handleIgnite(); }}
-                  rows={10}
+                  rows={3}
                   placeholder="例如：一个在赛博朋克废墟中寻找旧时代黑胶唱片的失明武士..."
                 />
               </FormField>
             </Panel>
 
-            <Panel title="导入已有剧本" subtitle="可选：走 import 路径启动，但仍创建同一种 workflow project。">
-              <FormField label="importedScript">
-                <TextArea value={importedScript} onChange={(event: any) => setImportedScript(event.target.value)} rows={10} placeholder="可选：粘贴已有剧本，项目会以 import 路径启动。" />
+            <Panel title="导入剧本">
+              <FormField label="剧本正文">
+                <TextArea value={importedScript} onChange={(event: any) => setImportedScript(event.target.value)} rows={3} placeholder="可选：粘贴已有剧本，项目会以 import 路径启动。" />
               </FormField>
             </Panel>
           </main>
 
           <aside className="space-y-6 min-w-0">
-            <Panel title="项目参数" subtitle="这些字段会进入 screenplay_create_project(init)">
-              <div className="space-y-4">
-                <FormField label="项目名称"><TextInput value={name} onChange={(event: any) => setName(event.target.value)} placeholder="可选，不填则自动从概念生成" /></FormField>
-                <FormField label="时长"><TextInput value={duration} onChange={(event: any) => setDuration(event.target.value)} /></FormField>
-                <FormField label="格式"><TextInput value={format} onChange={(event: any) => setFormat(event.target.value)} /></FormField>
-                <FormField label="短片模式"><TextInput value={ultrashortMode} onChange={(event: any) => setUltrashortMode(event.target.value)} /></FormField>
-                <FormField label="题材 genres"><TextInput value={genresText} onChange={(event: any) => setGenresText(event.target.value)} /></FormField>
-                <FormField label="大师模板 master"><TextInput value={master} onChange={(event: any) => setMaster(event.target.value)} placeholder="可选" /></FormField>
-                <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white/70 text-sm">
-                  <span>中文叙事 chinese</span>
-                  <input type="checkbox" checked={chinese} onChange={(event) => setChinese(event.target.checked)} />
-                </label>
-              </div>
-            </Panel>
-
-            <Panel title="创建入口" subtitle="创建后自动进入 /workflow">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-white/55 text-sm leading-relaxed">
-                  创建后将写入 currentProjectId，并清空旧 currentTaskId，避免沿用其他项目的 task。
-                </div>
-                <ActionButton onClick={handleIgnite} disabled={!canStart || isLoading} isLoading={isLoading} icon={canStart ? <CornerDownLeft size={16} /> : <BookOpen size={16} />}>
+            <Panel title="项目参数"
+              footer={
+                <ActionButton onClick={handleIgnite} disabled={!canStart || isLoading} isLoading={isLoading} icon={<CornerDownLeft size={16} />}>
                   开始推演
                 </ActionButton>
+              }
+            >
+              <div className="space-y-4">
+                <FormField label="项目名称"><TextInput value={name} onChange={(event: any) => setName(event.target.value)} placeholder="可选，不填自动生成" /></FormField>
+                <FormField label="时长">
+                  <SelectInput value={duration} onChange={(event) => setDuration(event.target.value)}>
+                    {DURATION_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="格式">
+                  <SelectInput value={format} onChange={(event) => setFormat(event.target.value)}>
+                    {FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="短片模式">
+                  <SelectInput value={ultrashortMode} onChange={(event) => setUltrashortMode(event.target.value)}>
+                    {ULTRASHORT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="题材">
+                  <div className="flex flex-wrap gap-2">
+                    {GENRE_OPTIONS.map((genre) => {
+                      const selected = genres.includes(genre);
+                      return (
+                        <button
+                          key={genre}
+                          type="button"
+                          onClick={() => toggleGenre(genre)}
+                          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${selected ? 'border-indigo-400/50 bg-indigo-500/18 text-indigo-100' : 'border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08]'}`}
+                        >
+                          {genre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </FormField>
+                <FormField label="大师模板">
+                  <SelectInput value={master} onChange={(event) => setMaster(event.target.value)}>
+                    {MASTER_OPTIONS.map((item) => <option key={item.value || 'none'} value={item.value}>{item.label}</option>)}
+                  </SelectInput>
+                </FormField>
+                <FormField label="中文叙事">
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <span className="text-sm font-semibold text-white/65">启用中文叙事</span>
+                    <Toggle value={chinese} onChange={setChinese} />
+                  </div>
+                </FormField>
               </div>
             </Panel>
           </aside>

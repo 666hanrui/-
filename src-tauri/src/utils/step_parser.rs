@@ -104,15 +104,13 @@ fn parse_kv_line(line: &str) -> Option<(String, String)> {
     {
         return None;
     }
-    let split = if let Some(pos) = trimmed.find(':') {
-        pos
-    } else if let Some(pos) = trimmed.find('：') {
-        pos
+    let (key, value) = if let Some((k, v)) = trimmed.split_once(':') {
+        (k.trim(), v.trim())
+    } else if let Some((k, v)) = trimmed.split_once('：') {
+        (k.trim(), v.trim())
     } else {
         return None;
     };
-    let key = trimmed[..split].trim();
-    let value = trimmed[split + 1..].trim();
     if key.is_empty() {
         return None;
     }

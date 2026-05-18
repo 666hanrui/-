@@ -56,6 +56,10 @@ function getFinalizedTaskId(result: any) {
   return result?.scriptTaskId || result?.script_task_id || result?.taskId || result?.task_id || "";
 }
 
+function getFinalizedProjectId(result: any) {
+  return result?.projectId || result?.project_id || "";
+}
+
 export default function StepEngine({
   stepConfig,
   isLastStep,
@@ -66,10 +70,13 @@ export default function StepEngine({
 }: StepEngineProps) {
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
-  const currentProjectId = useAppStore((state) => state.currentProjectId);
+  const downstreamProjectId = useAppStore((state) => state.currentProjectId);
+  const currentWorkflowProjectId = useAppStore((state) => state.currentWorkflowProjectId);
   const setCurrentTaskId = useAppStore((state) => state.setCurrentTaskId);
   const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
+  const setCurrentWorkflowProjectId = useAppStore((state) => state.setCurrentWorkflowProjectId);
   const showToast = useAppStore((state) => state.showToast);
+  const currentProjectId = currentWorkflowProjectId || (downstreamProjectId?.startsWith("sp_") ? downstreamProjectId : "");
 
   const [content, setContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -305,7 +312,9 @@ export default function StepEngine({
       );
       const taskId = getFinalizedTaskId(result);
       if (!taskId) throw new Error("finalize 没有返回 scriptTaskId/taskId");
-      setCurrentProjectId(currentProjectId);
+      const nextDownstreamProjectId = getFinalizedProjectId(result);
+      setCurrentWorkflowProjectId(currentProjectId);
+      setCurrentProjectId(nextDownstreamProjectId || downstreamProjectId || currentProjectId);
       setCurrentTaskId(taskId);
       showToast("工作流已成稿，已进入资产矩阵");
       navigate("/assets");
@@ -316,7 +325,7 @@ export default function StepEngine({
 
   const handleApprove = async () => {
     if (!currentProjectId) return alert("致命错误：缺失 ProjectID");
-    if (!content.trim()) return;
+    if (!content.trim() && !isImportFinalize) return;
     setIsApproving(true);
     setError("");
     try {
@@ -346,11 +355,12 @@ export default function StepEngine({
 
   const doneSteps = project?.doneSteps || project?.done_steps || [];
   const isApproved = doneSteps.includes(stepConfig.id);
+  const isImportFinalize = isLastStep && ((project as any)?.init?.path === "import" || Boolean((project as any)?.init?.importedScript || (project as any)?.init?.imported_script));
   const canGenerate = !(isGenerating || isApproving || isSelfchecking || isCheckpointing || isSavingEdit || isFinalizing || isLoadingVersions || Boolean(restoringVersionId));
-  const canApprove = Boolean(content.trim()) && canGenerate;
+  const canApprove = (Boolean(content.trim()) || isImportFinalize) && canGenerate;
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#080808]/80 backdrop-blur-2xl rounded-[2rem] border border-white/[0.08] shadow-[0_30px_60px_rgba(0,0,0,0.6)] relative overflow-hidden group">
+    <div className="w-full h-full min-h-0 flex flex-col bg-[#080808]/80 backdrop-blur-2xl rounded-[2rem] border border-white/[0.08] shadow-[0_30px_60px_rgba(0,0,0,0.6)] relative overflow-hidden group">
       <div
         className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-32 blur-[100px] transition-all duration-1000 pointer-events-none ${
           isGenerating || isSelfchecking || isCheckpointing || isSavingEdit || isFinalizing
@@ -359,7 +369,7 @@ export default function StepEngine({
         }`}
       />
 
-      <header className="flex items-center justify-between px-8 py-6 border-b border-white/[0.05] relative z-10">
+      <header className="shrink-0 flex items-center justify-between gap-4 px-8 py-6 border-b border-white/[0.05] relative z-10">
         <div className="flex flex-col">
           <h3 className="text-2xl font-bold text-white tracking-widest flex items-center gap-3">
             {stepConfig.title}
@@ -370,7 +380,7 @@ export default function StepEngine({
           </span>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex shrink-0 flex-wrap justify-end gap-3">
           <button onClick={handleIgnite} disabled={!canGenerate} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all duration-300 disabled:opacity-50 active:scale-95 shadow-[0_0_20px_rgba(99,102,241,0.3)]">
             {isGenerating ? <Loader2 className="animate-spin" size={16} /> : content ? <RefreshCw size={16} /> : <Play size={16} className="fill-white" />}
             {isGenerating ? "流式解算中..." : content ? "重新生成" : "生成"}
@@ -394,19 +404,19 @@ export default function StepEngine({
         </div>
       </header>
 
-      <div className="flex-1 p-8 overflow-y-auto custom-scrollbar relative z-10">
+      <div className="min-h-0 flex-1 p-8 overflow-y-auto custom-scrollbar relative z-10">
         {error && <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-100">{error}</div>}
         {checkpoint && stepConfig.id >= 6 && <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-100"><div className="flex items-center gap-2 font-bold mb-2"><ClipboardCheck size={16} /> after-step-6 checkpoint 已存在</div><div className="line-clamp-3 text-emerald-100/70">{checkpoint}</div></div>}
-        {showVersions && <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/80"><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2 font-bold"><History size={16} /> 版本历史</div><button className="text-xs text-white/40 hover:text-white" onClick={loadVersions}>刷新</button></div>{versions.length === 0 ? <div className="text-white/35">当前步骤暂无历史版本。</div> : <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">{versions.map((version, index) => { const versionId = getVersionId(version); const active = versionId && versionId === getVersionId(activeVersion); const preview = getVersionText(version).slice(0, 160); return <div key={versionId || index} className={`rounded-xl border p-3 ${active ? "border-indigo-400/40 bg-indigo-500/10" : "border-white/5 bg-black/20"}`}><div className="flex items-center justify-between gap-3"><div><div className="font-bold text-white/90">Version {getVersionNumber(version, index)} {active ? "· 当前" : ""}</div><div className="text-xs text-white/35">{getVersionCreatedAt(version) || versionId}</div></div><button className="btn ghost" onClick={() => restoreVersion(version)} disabled={active || restoringVersionId === versionId}>{restoringVersionId === versionId ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}恢复</button></div><div className="mt-2 text-xs text-white/45 line-clamp-2 whitespace-pre-wrap">{preview || "无文本预览"}</div></div>; })}</div>}</div>}
+        {showVersions && <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/80"><div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2 font-bold"><History size={16} /> 版本历史</div><button className="text-xs text-white/40 hover:text-white" onClick={loadVersions}>刷新</button></div>{versions.length === 0 ? <div className="text-white/35">当前步骤暂无历史版本。</div> : <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">{versions.map((version, index) => { const versionId = getVersionId(version); const active = versionId && versionId === getVersionId(activeVersion); const preview = getVersionText(version).slice(0, 160); return <div key={versionId || index} className={`rounded-xl border p-3 ${active ? "border-indigo-400/40 bg-indigo-500/10" : "border-white/5 bg-black/20"}`}><div className="flex items-center justify-between gap-3"><div><div className="font-bold text-white/90">Version {getVersionNumber(version, index)} {active ? "· 当前" : ""}</div><div className="text-xs text-white/35">{getVersionCreatedAt(version) || versionId}</div></div><button className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-bold text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => restoreVersion(version)} disabled={active || restoringVersionId === versionId}>{restoringVersionId === versionId ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}恢复</button></div><div className="mt-2 text-xs text-white/45 line-clamp-2 whitespace-pre-wrap">{preview || "无文本预览"}</div></div>; })}</div>}</div>}
         {selfcheckItems.length > 0 && <div className="mb-4 rounded-2xl border border-cyan-500/20 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100"><div className="flex items-center gap-2 font-bold mb-3"><ShieldCheck size={16} /> 自检结果</div><div className="space-y-2">{selfcheckItems.map((item, index) => <div key={index} className="rounded-xl bg-black/25 border border-white/5 p-3 text-cyan-100/80 whitespace-pre-wrap">{typeof item === "string" ? item : JSON.stringify(item, null, 2)}</div>)}</div></div>}
-        {!content && !isGenerating ? <div className="h-full flex flex-col items-center justify-center text-white/20"><Play size={48} className="mb-4 opacity-30" /><p className="tracking-widest uppercase font-mono text-sm">Awaiting Engine Ignition</p><p className="text-xs text-white/30 mt-2">若这是旧项目，当前步骤还没有 active version 输出。</p></div> : isEditing ? <textarea ref={textareaRef} value={content} onChange={(e) => setContent(e.target.value)} className="w-full h-full bg-transparent text-white/90 text-lg leading-loose p-4 focus:outline-none resize-none font-serif custom-scrollbar" autoFocus /> : <div className="prose prose-invert max-w-none font-serif text-lg leading-loose text-white/80 whitespace-pre-wrap">{content}{isGenerating && <span className="inline-block w-[0.6em] h-[1.2em] bg-white/80 align-middle ml-1 animate-[pulse_0.8s_infinite]" />}<div ref={contentEndRef} className="h-10" /></div>}
+        {!content && !isGenerating ? <div className="h-full flex flex-col items-center justify-center text-white/20"><Play size={48} className="mb-4 opacity-30" /><p className="tracking-widest uppercase font-mono text-sm">Awaiting Engine Ignition</p><p className="text-xs text-white/30 mt-2">当前步骤还没有 active version 输出。</p></div> : isEditing ? <textarea ref={textareaRef} value={content} onChange={(e) => setContent(e.target.value)} className="w-full h-full bg-transparent text-white/90 text-lg leading-loose p-4 focus:outline-none resize-none font-serif custom-scrollbar" autoFocus /> : <div className="prose prose-invert max-w-none font-serif text-lg leading-loose text-white/80 whitespace-pre-wrap">{content}{isGenerating && <span className="inline-block w-[0.6em] h-[1.2em] bg-white/80 align-middle ml-1 animate-[pulse_0.8s_infinite]" />}<div ref={contentEndRef} className="h-10" /></div>}
       </div>
 
-      <div className="px-8 py-5 border-t border-white/[0.05] flex justify-between items-center bg-black/20 relative z-10">
+      <div className="shrink-0 px-8 py-5 border-t border-white/[0.05] flex flex-wrap justify-between items-center gap-3 bg-black/20 relative z-10 shadow-[0_-16px_32px_rgba(0,0,0,0.28)]">
         <div className="text-white/30 text-xs font-mono flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isGenerating || isSelfchecking || isCheckpointing || isSavingEdit || isFinalizing ? "bg-yellow-400 animate-ping" : content ? isApproved ? "bg-green-400" : "bg-cyan-400" : "bg-white/20"}`} />{isGenerating ? "STREAMING DATA..." : isSelfchecking ? "SELF CHECKING..." : isCheckpointing ? "CHECKPOINTING..." : isSavingEdit ? "SAVING EDIT..." : isFinalizing ? "FINALIZING..." : isApproved ? "STEP APPROVED" : content ? "MODULE READY" : "STANDBY"}</div>
         <button onClick={handleApprove} disabled={!canApprove} className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm transition-all duration-300 disabled:opacity-20 disabled:scale-100 hover:scale-105 hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] group">
           {isApproving || isCheckpointing || isFinalizing ? <Loader2 size={16} className="animate-spin" /> : null}
-          {isLastStep ? "批准并进入资产锻造" : "批准本步并进入下一步"}
+          {isImportFinalize && !content.trim() ? "导入剧本并进入资产锻造" : isLastStep ? "批准并进入资产锻造" : "批准本步并进入下一步"}
           <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>

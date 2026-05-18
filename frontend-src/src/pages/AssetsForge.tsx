@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Library, Map, RefreshCw, Save, Users } from 'lucide-react';
+import { Box, Clapperboard, FileText, Film, FolderKanban, Image as ImageIcon, Layers3, Library, Map, RefreshCw, Save, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ScriptSelector from '../components/ScriptSelector';
 import { useAppStore } from '../store/useAppStore';
@@ -43,6 +43,10 @@ const pickTaskId = (task: ScriptTask) => {
   const anyTask = task as any;
   return anyTask.taskId || anyTask.task_id || anyTask.task?.taskId || anyTask.task?.task_id || '';
 };
+const pickProjectId = (task: ScriptTask) => {
+  const anyTask = task as any;
+  return anyTask.projectId || anyTask.project_id || anyTask.task?.projectId || anyTask.task?.project_id || '';
+};
 
 function eventLine(eventName: string, payload: any) {
   const count = payload?.count !== undefined ? ` count=${payload.count}` : '';
@@ -70,7 +74,7 @@ function metaFromResult(result: any): ExtractionMeta {
 }
 
 export default function AssetsForge() {
-  const { setRealm, currentTaskId, setCurrentTaskId, currentProjectId } = useAppStore();
+  const { setRealm, currentTaskId, setCurrentTaskId, currentProjectId, setCurrentProjectId } = useAppStore();
   const { invoke } = useTudouBridge();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AssetTab>('characters');
@@ -138,7 +142,9 @@ export default function AssetsForge() {
   async function selectScript(task: ScriptTask) {
     const taskId = pickTaskId(task);
     if (!taskId) return;
+    const projectId = pickProjectId(task);
     setCurrentTaskId(taskId);
+    if (projectId) setCurrentProjectId(projectId);
     setExtractionMeta(null);
     await loadAssets(taskId);
   }
@@ -204,15 +210,16 @@ export default function AssetsForge() {
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<Library size={24} />}
-        eyebrow="Asset Recovery Console"
+        eyebrow="Canonical Asset Flow"
         title="资产矩阵 / 验收工作台"
-        subtitle="资产页只负责角色、场景、道具的提取、编辑和保存。图像/视频提示词继续在 PromptLab 中处理。"
+        subtitle="严格对应 asset_character、asset_scene、asset_prop。资产页只负责角色、场景、道具的提取、编辑和保存，后续图像、视频、逐镜提示词继续走各自原始 prompt。"
         actions={
           <ActionBar align="right" className="flex-wrap">
             <ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton>
             <ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton>
             <ActionButton variant="secondary" onClick={() => navigate('/image')} disabled={!currentTaskId} icon={<ImageIcon size={16} />}>图像</ActionButton>
             <ActionButton variant="secondary" onClick={() => navigate('/video')} disabled={!currentTaskId} icon={<Film size={16} />}>视频</ActionButton>
+            <ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!currentTaskId} icon={<Layers3 size={16} />}>逐镜</ActionButton>
             <ActionButton variant="secondary" onClick={() => navigate('/seedance')} disabled={!currentTaskId} icon={<Clapperboard size={16} />}>Seedance</ActionButton>
           </ActionBar>
         }
@@ -236,37 +243,40 @@ export default function AssetsForge() {
             </div>
           </Panel>
 
-          <Panel title="扫描控制" subtitle="监听真实 asset:scan-* 事件">
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              <MiniStat label="角色" value={counts.characters} />
-              <MiniStat label="场景" value={counts.scenes} />
-              <MiniStat label="道具" value={counts.props} />
-            </div>
-            {extractionMeta && (
-              <div className={`mb-5 rounded-2xl border p-4 text-sm ${extractionMeta.extractionMode === 'fallback' ? 'border-yellow-500/20 bg-yellow-500/10 text-yellow-100' : extractionMeta.extractionMode === 'mixed' ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'}`}>
-                <div className="font-bold mb-2">{modeLabel(extractionMeta.extractionMode)}</div>
-                <div className="space-y-1 text-xs opacity-80 font-mono break-all">
-                  <div>configReady: {String(extractionMeta.configReady)}</div>
-                  <div>fallbackUsed: {String(extractionMeta.fallbackUsed)}</div>
-                  <div>llmUsed: {String(extractionMeta.llmUsed)}</div>
-                  <div>model: {extractionMeta.extractionModel || 'N/A'}</div>
+            <Panel title="扫描控制" subtitle="监听真实 asset:scan-* 事件"
+              footer={
+                <ActionBar className="flex-col items-stretch">
+                  <ActionButton onClick={extractAssets} disabled={!currentTaskId || busy === 'extract'} isLoading={busy === 'extract'} icon={<RefreshCw size={16} />}>扫描剧本资产</ActionButton>
+                  <ActionButton variant="secondary" onClick={() => currentTaskId && loadAssets(currentTaskId)} disabled={!currentTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>重新读取资产</ActionButton>
+                  <ActionButton variant="secondary" onClick={saveAssets} disabled={!currentTaskId || busy === 'save'} isLoading={busy === 'save'} icon={<Save size={16} />}>保存资产修改</ActionButton>
+                </ActionBar>
+              }
+            >
+              <div className="grid grid-cols-3 gap-3 mb-5">
+                <MiniStat label="角色" value={counts.characters} />
+                <MiniStat label="场景" value={counts.scenes} />
+                <MiniStat label="道具" value={counts.props} />
+              </div>
+              {extractionMeta && (
+                <div className={`mb-5 rounded-2xl border p-4 text-sm ${extractionMeta.extractionMode === 'fallback' ? 'border-yellow-500/20 bg-yellow-500/10 text-yellow-100' : extractionMeta.extractionMode === 'mixed' ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100'}`}>
+                  <div className="font-bold mb-2">{modeLabel(extractionMeta.extractionMode)}</div>
+                  <div className="space-y-1 text-xs opacity-80 font-mono break-all">
+                    <div>configReady: {String(extractionMeta.configReady)}</div>
+                    <div>fallbackUsed: {String(extractionMeta.fallbackUsed)}</div>
+                    <div>llmUsed: {String(extractionMeta.llmUsed)}</div>
+                    <div>model: {extractionMeta.extractionModel || 'N/A'}</div>
+                  </div>
                 </div>
-              </div>
-            )}
-            {!extractionMeta && totalAssets > 0 && (
-              <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white/45 text-sm">
-                当前资产来自历史记录。重新扫描后会显示本次 extractionMode / fallbackUsed / llmUsed。
-              </div>
-            )}
-            <ActionBar className="flex-col items-stretch">
-              <ActionButton onClick={extractAssets} disabled={!currentTaskId || busy === 'extract'} isLoading={busy === 'extract'} icon={<RefreshCw size={16} />}>扫描剧本资产</ActionButton>
-              <ActionButton variant="secondary" onClick={() => currentTaskId && loadAssets(currentTaskId)} disabled={!currentTaskId || busy === 'load'} isLoading={busy === 'load'} icon={<RefreshCw size={16} />}>重新读取资产</ActionButton>
-              <ActionButton variant="secondary" onClick={saveAssets} disabled={!currentTaskId || busy === 'save'} isLoading={busy === 'save'} icon={<Save size={16} />}>保存资产修改</ActionButton>
-            </ActionBar>
-          </Panel>
+              )}
+              {!extractionMeta && totalAssets > 0 && (
+                <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white/45 text-sm">
+                  当前资产来自历史记录。重新扫描后会显示本次 extractionMode / fallbackUsed / llmUsed。
+                </div>
+              )}
+            </Panel>
 
           <Panel title="扫描事件日志" subtitle="最近 100 条事件" noPadding>
-            <ResultViewer title="ASSET EVENTS" content={progress.length ? progress.join('\n') : '等待真实资产扫描事件。'} />
+            <ResultViewer maxHeight="max-h-[300px]" title="ASSET EVENTS" content={progress.length ? progress.join('\n') : '等待真实资产扫描事件。'} />
           </Panel>
         </aside>
 
@@ -292,19 +302,25 @@ export default function AssetsForge() {
             ) : (
               <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5">
                 {items.map((item: any, index: number) => (
-                  <Panel key={item.id || `${activeTab}-${index}`} title={`${TAB_META[activeTab].label} #${index + 1}`} subtitle={item.name || '未命名资产'}>
+                  <div key={item.id || `${activeTab}-${index}`} className="bg-[#0a0a0a]/60 border border-white/[0.06] rounded-2xl p-5 shadow-[0_10px_30px_rgba(0,0,0,0.3),inset_0_1px_1px_rgba(255,255,255,0.03)]">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="text-base font-bold text-white/90 tracking-wide">{TAB_META[activeTab].label} #{index + 1}</div>
+                        <div className="text-[11px] text-white/40 mt-1">{item.name || '未命名资产'}</div>
+                      </div>
+                    </div>
                     <div className="space-y-4">
                       {FIELD_MAP[activeTab].map((field) => (
                         <FormField key={field} label={field}>
                           {field === 'aiPrompt' ? (
-                            <TextArea value={item[field] || ''} onChange={(event: any) => updateField(activeTab, index, field, event.target.value)} rows={5} />
+                            <TextArea value={item[field] || ''} onChange={(event: any) => updateField(activeTab, index, field, event.target.value)} rows={3} />
                           ) : (
                             <TextInput value={item[field] || ''} onChange={(event: any) => updateField(activeTab, index, field, event.target.value)} />
                           )}
                         </FormField>
                       ))}
                     </div>
-                  </Panel>
+                  </div>
                 ))}
               </div>
             )}

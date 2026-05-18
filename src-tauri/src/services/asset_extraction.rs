@@ -42,10 +42,6 @@ fn parse_asset_list(raw: &str, label: &str) -> Result<Vec<serde_json::Value>, St
         .map_err(|e| format!("{} JSON 解析失败: {}", label, e))
 }
 
-fn string_field(raw: &serde_json::Value, key: &str, fallback: &str) -> String {
-    raw.get(key).and_then(|v| v.as_str()).unwrap_or(fallback).to_string()
-}
-
 fn ensure_string(obj: &mut serde_json::Map<String, serde_json::Value>, key: &str, fallback: &str) {
     let should_fill = obj.get(key).and_then(|v| v.as_str()).map(|s| s.trim().is_empty()).unwrap_or(true);
     if should_fill {
@@ -249,48 +245,48 @@ pub fn run_asset_extraction(conn: &Connection, task_id: &str) -> impl std::futur
             match extract_with_prompt(&p.runtime_config, "asset_character", &p.script_body).await {
                 Some(items) => {
                     llm_used = true;
-                    items.iter().map(normalize_character).collect()
+                    items.iter().map(normalize_character).collect::<Vec<_>>()
                 },
                 None => {
                     fallback_used = true;
-                    fallback_characters(&p.script_body).iter().map(normalize_character).collect()
+                    fallback_characters(&p.script_body).iter().map(normalize_character).collect::<Vec<_>>()
                 }
             }
         } else {
             fallback_used = true;
-            fallback_characters(&p.script_body).iter().map(normalize_character).collect()
+            fallback_characters(&p.script_body).iter().map(normalize_character).collect::<Vec<_>>()
         };
 
         let scenes = if p.config_ready {
             match extract_with_prompt(&p.runtime_config, "asset_scene", &p.script_body).await {
                 Some(items) => {
                     llm_used = true;
-                    items.iter().map(normalize_scene).collect()
+                    items.iter().map(normalize_scene).collect::<Vec<_>>()
                 },
                 None => {
                     fallback_used = true;
-                    fallback_scenes(&p.script_body).iter().map(normalize_scene).collect()
+                    fallback_scenes(&p.script_body).iter().map(normalize_scene).collect::<Vec<_>>()
                 }
             }
         } else {
             fallback_used = true;
-            fallback_scenes(&p.script_body).iter().map(normalize_scene).collect()
+            fallback_scenes(&p.script_body).iter().map(normalize_scene).collect::<Vec<_>>()
         };
 
         let props = if p.config_ready {
             match extract_with_prompt(&p.runtime_config, "asset_prop", &p.script_body).await {
                 Some(items) => {
                     llm_used = true;
-                    items.iter().map(normalize_prop).collect()
+                    items.iter().map(normalize_prop).collect::<Vec<_>>()
                 },
                 None => {
                     fallback_used = true;
-                    fallback_props(&p.script_body).iter().map(normalize_prop).collect()
+                    fallback_props(&p.script_body).iter().map(normalize_prop).collect::<Vec<_>>()
                 }
             }
         } else {
             fallback_used = true;
-            fallback_props(&p.script_body).iter().map(normalize_prop).collect()
+            fallback_props(&p.script_body).iter().map(normalize_prop).collect::<Vec<_>>()
         };
 
         let write_conn = Connection::open(&p.db_path).map_err(|e| format!("打开数据库写入资产失败: {}", e))?;

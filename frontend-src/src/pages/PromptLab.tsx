@@ -14,6 +14,7 @@ import ActionBar, { ActionButton } from '../components/ui/ActionBar';
 import EmptyState from '../components/ui/EmptyState';
 import FormField, { TextArea, TextInput } from '../components/ui/FormField';
 import ResultViewer from '../components/ui/ResultViewer';
+import Collapsible from '../components/ui/Collapsible';
 
 interface PromptLabProps { kind: 'image' | 'video'; }
 function resultTaskId(result: any) { return result?.taskId || result?.task_id || result?.id || ''; }
@@ -111,9 +112,9 @@ export default function PromptLab({ kind }: PromptLabProps) {
     <PageShell maxWidth="max-w-full">
       <ModuleHeader
         icon={<Icon size={24} />}
-        eyebrow="Prompt Recovery Console"
+        eyebrow="Canonical Independent Prompt Flow"
         title={kind === 'image' ? '图像提示词 / 验收工作台' : '视频提示词 / 验收工作台'}
-        subtitle={kind === 'image' ? '旧独立图像提示词流程。逐镜分镜请进入 V2 旧链路工作台。' : '旧独立视频提示词流程。逐镜分镜请进入 V2 旧链路工作台。'}
+        subtitle={kind === 'image' ? '严格对应 image_prompt_generation + prompt_review。逐镜分镜请进入原始逐镜链路工作台。' : '严格对应 video_prompt_generation + prompt_review。逐镜分镜请进入原始逐镜链路工作台。'}
         actions={<ActionBar align="right" className="flex-wrap"><ActionButton variant="secondary" onClick={() => navigate('/projects')} icon={<FolderKanban size={16} />}>项目库</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/scripts')} icon={<FileText size={16} />}>剧本</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/assets')} disabled={!sourceScriptTaskId} icon={<Boxes size={16} />}>资产</ActionButton><ActionButton variant="secondary" onClick={() => navigate(kind === 'image' ? '/video' : '/image')} disabled={!sourceScriptTaskId} icon={kind === 'image' ? <Film size={16} /> : <ImageIcon size={16} />}>{kind === 'image' ? '视频' : '图像'}</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!sourceScriptTaskId} icon={<Layers3 size={16} />}>逐镜</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/seedance')} disabled={!sourceScriptTaskId} icon={<Clapperboard size={16} />}>Seedance</ActionButton></ActionBar>}
       />
 
@@ -124,15 +125,21 @@ export default function PromptLab({ kind }: PromptLabProps) {
       <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6 min-h-0">
         <aside className="space-y-6 min-w-0">
           <Panel title="Script Source" subtitle="选择剧本任务或手动粘贴源文本" noPadding><div className="p-4"><ScriptSelector selectedTaskId={sourceScriptTaskId} onSelect={onSelectScript} /></div></Panel>
-          <Panel title="源剧本正文" subtitle={`长度 ${sourceText.trim().length} · 结果段落 ${sections.length}`}><TextArea value={sourceText} onChange={(event: any) => setSourceText(event.target.value)} rows={16} /></Panel>
+          <Panel title="源剧本正文" subtitle={`长度 ${sourceText.trim().length} · 结果段落 ${sections.length}`}><TextArea value={sourceText} onChange={(event: any) => setSourceText(event.target.value)} rows={4} /></Panel>
         </aside>
         <main className="space-y-6 min-w-0">
-          <Panel title={kind === 'image' ? '独立图像提示词' : '独立视频提示词'} subtitle={outputStatus} actions={<ActionBar><ActionButton onClick={generate} disabled={!sourceText.trim()} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成提示词</ActionButton><ActionButton variant="secondary" onClick={runReview} disabled={!generatedPromptTaskId} isLoading={busy === 'review'} icon={<Activity size={16} />}>审核</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!sourceScriptTaskId} icon={<Layers3 size={16} />}>进入逐镜 V2</ActionButton></ActionBar>}>
-            <div className="grid md:grid-cols-2 gap-4"><FormField label={kind === 'image' ? 'Visual Style' : 'Video Style'}><TextInput value={style} onChange={(event: any) => setStyle(event.target.value)} /></FormField><FormField label={kind === 'image' ? 'Image Goal' : 'Motion Focus'}><TextInput value={goal} onChange={(event: any) => setGoal(event.target.value)} /></FormField></div>
+          <Panel title={kind === 'image' ? '独立图像提示词' : '独立视频提示词'} subtitle={outputStatus}
+            footer={<ActionBar><ActionButton onClick={generate} disabled={!sourceText.trim()} isLoading={busy === 'generate'} icon={<Wand2 size={16} />}>生成提示词</ActionButton><ActionButton variant="secondary" onClick={runReview} disabled={!generatedPromptTaskId} isLoading={busy === 'review'} icon={<Activity size={16} />}>审核</ActionButton><ActionButton variant="secondary" onClick={() => navigate('/frame-prompt')} disabled={!sourceScriptTaskId} icon={<Layers3 size={16} />}>进入逐镜链路</ActionButton></ActionBar>}>
+            <Collapsible title="风格参数" subtitle="Visual Style / Motion Focus">
+              <div className="space-y-4">
+                <FormField label={kind === 'image' ? 'Visual Style' : 'Video Style'}><TextInput value={style} onChange={(event: any) => setStyle(event.target.value)} /></FormField>
+                <FormField label={kind === 'image' ? 'Image Goal' : 'Motion Focus'}><TextInput value={goal} onChange={(event: any) => setGoal(event.target.value)} /></FormField>
+              </div>
+            </Collapsible>
           </Panel>
           {busy === 'generate' && <EmptyState title="提示词生成中" description="本地提示词引擎正在工作。" icon={<Loader2 size={30} className="animate-spin" />} />}
           {!busy && sections.length === 0 && <EmptyState title="等待生成结果" description="选择剧本、设置风格后点击生成提示词。" icon={<Save size={30} />} />}
-          {sections.length > 0 && <div className="grid grid-cols-1 gap-5">{sections.map((section, index) => <Panel key={`${section.title}-${index}`} title={section.title || `Segment ${index + 1}`} subtitle={`Segment ${index + 1}`}><ResultViewer title={`PROMPT SEGMENT ${index + 1}`} content={sectionLines(section).join('\n')} /></Panel>)}</div>}
+          {sections.length > 0 && <div className="grid grid-cols-1 gap-5">{sections.map((section, index) => <Panel key={`${section.title}-${index}`} title={section.title || `Segment ${index + 1}`} subtitle={`Segment ${index + 1}`}><ResultViewer maxHeight="max-h-[400px]" title={`PROMPT SEGMENT ${index + 1}`} content={sectionLines(section).join('\n')} /></Panel>)}</div>}
         </main>
       </div>
     </PageShell>

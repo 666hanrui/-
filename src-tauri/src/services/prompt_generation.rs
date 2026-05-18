@@ -655,6 +655,14 @@ pub fn get_outline(conn: &Connection, task_id: &str) -> Option<serde_json::Value
                 if parsed.get("shots").and_then(|v| v.as_array()).is_some() {
                     return Some(parsed);
                 }
+                if parsed
+                    .get("outline")
+                    .and_then(|v| v.get("shots"))
+                    .and_then(|v| v.as_array())
+                    .is_some()
+                {
+                    return parsed.get("outline").cloned();
+                }
             }
             None
         }
